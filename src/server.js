@@ -111,6 +111,10 @@ app.get('/dashboard', requireAuth, (req, res) => {
 app.use('/api/devices', requireAuth, deviceRoutes);
 app.use('/api/messages', requireAuth, messageRoutes);
 app.use('/api/analytics', requireAuth, analyticsRoutes);
+app.use('/api/campaigns', requireAuth, require('./routes/campaigns'));
+
+// WhatsApp app routes (login, logout, etc)
+app.use('/app', requireAuth, require('./routes/whatsapp'));
 
 // WhatsApp Web view route
 app.get('/device/:id/whatsapp', requireAuth, async (req, res) => {
@@ -137,6 +141,35 @@ app.get('/device/:id/whatsapp', requireAuth, async (req, res) => {
             device: device,
             user: req.user
         });
+    } catch (error) {
+        console.error('WhatsApp Web error:', error);
+        res.status(500).send('Internal server error');
+    }
+});
+
+// WhatsApp Web route for device
+app.get('/device/:id/whatsapp-web', requireAuth, async (req, res) => {
+    try {
+        const deviceId = req.params.id;
+        const { getUserRepository } = require('./repository/userRepository');
+        const { getDB } = require('./config/database');
+        
+        const db = getDB();
+        const userRepo = getUserRepository(db);
+        
+        // Check if user owns this device
+        const owns = await userRepo.userOwnsDevice(req.user.id, deviceId);
+        if (!owns) {
+            return res.status(403).send('Access denied');
+        }
+        
+        const device = await userRepo.getDevice(deviceId);
+        if (!device) {
+            return res.status(404).send('Device not found');
+        }
+        
+        // For now, redirect to a placeholder or WhatsApp Web
+        res.redirect('https://web.whatsapp.com');
     } catch (error) {
         console.error('WhatsApp Web error:', error);
         res.status(500).send('Internal server error');

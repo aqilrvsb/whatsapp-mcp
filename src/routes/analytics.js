@@ -2,76 +2,98 @@ const express = require('express');
 const router = express.Router();
 const { getDB } = require('../config/database');
 
-// Get dashboard analytics
-router.get('/dashboard', async (req, res) => {
+// Get analytics for specific time range
+router.get('/:days', async (req, res) => {
     try {
         const db = getDB();
         const userId = req.user.id;
+        const days = parseInt(req.params.days) || 7;
+        const deviceFilter = req.query.device;
         
-        // Get basic analytics (simplified for now)
-        const analytics = {
-            messagesSent: 0,
-            messagesReceived: 0,
-            activeChats: 0,
-            totalDevices: 0,
-            activeDevices: 0
-        };
+        // Generate mock data for now (will be replaced with real data)
+        const mockData = generateMockAnalytics(days);
         
-        // Get device count
-        const deviceResult = await db.one(
-            `SELECT 
-                COUNT(*) as total,
-                COUNT(CASE WHEN status = 'online' THEN 1 END) as active
-             FROM user_devices 
-             WHERE user_id = $1`,
-            [userId]
-        );
-        
-        analytics.totalDevices = parseInt(deviceResult.total);
-        analytics.activeDevices = parseInt(deviceResult.active);
-        
-        // Get message analytics if table exists
-        try {
-            const messageResult = await db.oneOrNone(
-                `SELECT 
-                    COALESCE(SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END), 0) as sent,
-                    COALESCE(SUM(CASE WHEN status = 'received' THEN 1 ELSE 0 END), 0) as received
-                 FROM message_analytics
-                 WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '24 hours'`,
-                [userId]
-            );
-            
-            if (messageResult) {
-                analytics.messagesSent = parseInt(messageResult.sent);
-                analytics.messagesReceived = parseInt(messageResult.received);
-            }
-        } catch (error) {
-            // Table might not exist yet
-            console.log('Message analytics table not available');
-        }
-        
-        res.json(analytics);
+        res.json({
+            code: 'SUCCESS',
+            results: mockData
+        });
     } catch (error) {
         console.error('Error getting analytics:', error);
-        res.status(500).json({ error: 'Failed to get analytics' });
+        res.status(500).json({ 
+            code: 'ERROR',
+            message: 'Failed to get analytics' 
+        });
     }
 });
 
-// Get analytics by time range
-router.get('/range/:range', async (req, res) => {
+// Get custom date range analytics
+router.get('/custom', async (req, res) => {
     try {
-        const { range } = req.params;
-        const userId = req.user.id;
+        const { start, end, device } = req.query;
         
-        // TODO: Implement time-based analytics
+        if (!start || !end) {
+            return res.status(400).json({
+                code: 'ERROR',
+                message: 'Start and end dates are required'
+            });
+        }
+        
+        // Calculate days difference
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+        
+        // Generate mock data
+        const mockData = generateMockAnalytics(days, startDate, endDate);
+        
         res.json({
-            range,
-            data: []
+            code: 'SUCCESS',
+            results: mockData
         });
     } catch (error) {
-        console.error('Error getting range analytics:', error);
-        res.status(500).json({ error: 'Failed to get analytics' });
+        console.error('Error getting custom analytics:', error);
+        res.status(500).json({ 
+            code: 'ERROR',
+            message: 'Failed to get analytics' 
+        });
     }
 });
+
+// Helper function to generate mock analytics
+function generateMockAnalytics(days, startDate = null, endDate = null) {
+    const leadsSent = Math.floor(Math.random() * 1000) + 500;
+    const leadsReceived = Math.floor(leadsSent * 0.8);
+    const leadsNotReceived = leadsSent - leadsReceived;
+    const leadsRead = Math.floor(leadsReceived * 0.7);
+    const leadsNotRead = leadsReceived - leadsRead;
+    const leadsReplied = Math.floor(leadsRead * 0.5);
+    
+    const metrics = {
+        leadsSent: leadsSent,
+        leadsReceived: leadsReceived,
+        leadsNotReceived: leadsNotReceived,
+        leadsRead: leadsRead,
+        leadsNotRead: leadsNotRead,
+        leadsReplied: leadsReplied
+    };
+    
+    const daily = [];
+    const today = endDate || new Date();
+    
+    for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - i);
+        
+        daily.push({
+            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            sent: Math.floor(Math.random() * 100) + 20,
+            received: Math.floor(Math.random() * 80) + 15,
+            read: Math.floor(Math.random() * 60) + 10,
+            replied: Math.floor(Math.random() * 30) + 5
+        });
+    }
+    
+    return { metrics, daily };
+}
 
 module.exports = router;

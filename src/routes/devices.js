@@ -10,30 +10,45 @@ router.get('/', async (req, res) => {
         const userRepo = getUserRepository(db);
         
         const devices = await userRepo.getUserDevices(req.user.id);
-        res.json(devices);
+        res.json({
+            code: 'SUCCESS',
+            results: devices
+        });
     } catch (error) {
         console.error('Error getting devices:', error);
-        res.status(500).json({ error: 'Failed to get devices' });
+        res.status(500).json({ 
+            code: 'ERROR',
+            message: 'Failed to get devices' 
+        });
     }
 });
 
 // Add new device
 router.post('/', async (req, res) => {
     try {
-        const { deviceName } = req.body;
+        const { name } = req.body;
         
-        if (!deviceName) {
-            return res.status(400).json({ error: 'Device name is required' });
+        if (!name) {
+            return res.status(400).json({ 
+                code: 'ERROR',
+                message: 'Device name is required' 
+            });
         }
         
         const db = getDB();
         const userRepo = getUserRepository(db);
         
-        const device = await userRepo.addUserDevice(req.user.id, deviceName);
-        res.json(device);
+        const device = await userRepo.addUserDevice(req.user.id, name);
+        res.json({
+            success: true,
+            device: device
+        });
     } catch (error) {
         console.error('Error adding device:', error);
-        res.status(500).json({ error: 'Failed to add device' });
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to add device' 
+        });
     }
 });
 
@@ -82,7 +97,10 @@ router.delete('/:id', async (req, res) => {
         // Delete from database
         await userRepo.deleteDevice(id);
         
-        res.json({ message: 'Device deleted successfully' });
+        res.json({ 
+            code: 'SUCCESS',
+            message: 'Device deleted successfully' 
+        });
     } catch (error) {
         console.error('Error deleting device:', error);
         res.status(500).json({ error: 'Failed to delete device' });
