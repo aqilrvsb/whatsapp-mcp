@@ -8,49 +8,17 @@ router.get('/', async (req, res) => {
         const db = getDB();
         const userId = req.user.id;
         
-        // For now, return mock data with multiple campaigns per date
-        const campaigns = [
-            {
-                id: '1',
-                campaign_date: '2025-06-26',
-                title: 'Summer Sale',
-                niche: 'Promotion',
-                message: 'Check out our summer sale!',
-                status: 'delivered',
-                scheduled_time: '10:00'
-            },
-            {
-                id: '2',
-                campaign_date: '2025-06-26',
-                title: 'New Product Launch',
-                niche: 'Announcement',
-                message: 'Introducing our new product line',
-                status: 'ongoing',
-                scheduled_time: '14:00'
-            },
-            {
-                id: '3',
-                campaign_date: '2025-06-27',
-                title: 'Weekly Newsletter',
-                niche: 'Newsletter',
-                message: 'Your weekly updates',
-                status: 'scheduled',
-                scheduled_time: '09:00'
-            }
-        ];
-        
-        // Group campaigns by date
-        const groupedCampaigns = {};
-        campaigns.forEach(campaign => {
-            if (!groupedCampaigns[campaign.campaign_date]) {
-                groupedCampaigns[campaign.campaign_date] = [];
-            }
-            groupedCampaigns[campaign.campaign_date].push(campaign);
-        });
+        // Get real campaigns from database
+        const campaigns = await db.manyOrNone(
+            `SELECT * FROM campaigns 
+             WHERE user_id = $1 
+             ORDER BY campaign_date DESC, scheduled_time DESC`,
+            [userId]
+        );
         
         res.json({
             code: 'SUCCESS',
-            results: campaigns
+            results: campaigns || []
         });
     } catch (error) {
         console.error('Error getting campaigns:', error);
@@ -64,20 +32,29 @@ router.get('/', async (req, res) => {
 // Create new campaign
 router.post('/', async (req, res) => {
     try {
+        const db = getDB();
+        const userId = req.user.id;
         const { campaign_date, title, niche, message, image_url, scheduled_time } = req.body;
         
-        // For now, just return success
+        // Validate required fields
+        if (!campaign_date || !title || !message) {
+            return res.status(400).json({
+                code: 'ERROR',
+                message: 'Campaign date, title, and message are required'
+            });
+        }
+        
+        // Insert campaign into database
+        const campaign = await db.one(
+            `INSERT INTO campaigns (user_id, campaign_date, title, niche, message, image_url, scheduled_time, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled')
+             RETURNING *`,
+            [userId, campaign_date, title, niche, message, image_url, scheduled_time]
+        );
+        
         res.json({
             code: 'SUCCESS',
-            results: {
-                id: Date.now().toString(),
-                campaign_date,
-                title,
-                niche,
-                message,
-                image_url,
-                scheduled_time
-            }
+            results: campaign
         });
     } catch (error) {
         console.error('Error creating campaign:', error);
@@ -91,21 +68,37 @@ router.post('/', async (req, res) => {
 // Update campaign
 router.put('/:id', async (req, res) => {
     try {
+        const db = getDB();
+        const userId = req.user.id;
         const { id } = req.params;
         const { campaign_date, title, niche, message, image_url, scheduled_time } = req.body;
         
-        // For now, just return success
+        // Check ownership
+        const existing = await db.oneOrNone(
+            'SELECT id FROM campaigns WHERE id = $1 AND user_id = $2',
+            [id, userId]
+        );
+        
+        if (!existing) {
+            return res.status(404).json({
+                code: 'ERROR',
+                message: 'Campaign not found'
+            });
+        }
+        
+        // Update campaign
+        const campaign = await db.one(
+            `UPDATE campaigns 
+             SET campaign_date = $3, title = $4, niche = $5, message = $6, 
+                 image_url = $7, scheduled_time = $8, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1 AND user_id = $2
+             RETURNING *`,
+            [id, userId, campaign_date, title, niche, message, image_url, scheduled_time]
+        );
+        
         res.json({
             code: 'SUCCESS',
-            results: {
-                id,
-                campaign_date,
-                title,
-                niche,
-                message,
-                image_url,
-                scheduled_time
-            }
+            results: campaign
         });
     } catch (error) {
         console.error('Error updating campaign:', error);
@@ -119,7 +112,22 @@ router.put('/:id', async (req, res) => {
 // Delete campaign
 router.delete('/:id', async (req, res) => {
     try {
+        const db = getDB();
+        const userId = req.user.id;
         const { id } = req.params;
+        
+        // Delete campaign (ownership check via user_id)
+        const result = await db.result(
+            'DELETE FROM campaigns WHERE id = $1 AND user_id = $2',
+            [id, userId]
+        );
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({
+                code: 'ERROR',
+                message: 'Campaign not found'
+            });
+        }
         
         res.json({
             code: 'SUCCESS',

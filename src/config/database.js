@@ -55,6 +55,33 @@ async function runMigrations() {
         
         console.log('✅ Database schema applied successfully');
         
+        // Create campaigns table if not exists
+        try {
+            await db.none(`
+                CREATE TABLE IF NOT EXISTS campaigns (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    campaign_date DATE NOT NULL,
+                    title VARCHAR(255) NOT NULL,
+                    niche VARCHAR(100),
+                    message TEXT NOT NULL,
+                    image_url TEXT,
+                    scheduled_time TIME,
+                    status VARCHAR(50) DEFAULT 'scheduled',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            
+            // Create indexes
+            await db.none(`CREATE INDEX IF NOT EXISTS idx_campaigns_user_date ON campaigns(user_id, campaign_date)`);
+            await db.none(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)`);
+            
+            console.log('✅ Campaigns table created/verified');
+        } catch (err) {
+            console.log('Campaigns table error (may already exist):', err.message);
+        }
+        
     } catch (error) {
         console.error('❌ Error running migrations:', error);
         // Don't throw - allow app to start even if some migrations fail

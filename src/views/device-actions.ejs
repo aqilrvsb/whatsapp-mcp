@@ -350,14 +350,14 @@
             resultBox.className = 'result-box';
             resultBox.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending message...';
             
-            fetch('/send/message', {
+            fetch('/api/whatsapp/send/message', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 credentials: 'include',
                 body: JSON.stringify({
-                    device_id: deviceId,
+                    deviceId: deviceId,
                     phone: phone,
                     message: message
                 })
@@ -403,17 +403,24 @@
             
             // Compress image before sending
             compressImageFile(imageFile, function(compressedBlob) {
-                const formData = new FormData();
-                formData.append('device_id', deviceId);
-                formData.append('phone', phone);
-                formData.append('image', compressedBlob, 'compressed.jpg');
-                if (caption) formData.append('caption', caption);
-                
-                fetch('/send/image', {
-                    method: 'POST',
-                    credentials: 'include',
-                    body: formData
-                })
+                // Convert blob to base64
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                    const base64Data = reader.result;
+                    
+                    fetch('/api/whatsapp/send/image', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            deviceId: deviceId,
+                            phone: phone,
+                            caption: caption,
+                            imageUrl: base64Data
+                        })
+                    })
                 .then(response => response.json())
                 .then(data => {
                     if (data.code === 'SUCCESS') {
@@ -432,6 +439,8 @@
                     resultBox.className = 'result-box error-result';
                     resultBox.innerHTML = `<i class="bi bi-x-circle"></i> Error: ${error.message}`;
                 });
+                };
+                reader.readAsDataURL(compressedBlob);
             });
         }        
         // Compress image file to 350KB max
@@ -495,18 +504,27 @@
             resultBox.className = 'result-box';
             resultBox.innerHTML = '<i class="bi bi-hourglass-split"></i> Checking status...';
             
-            fetch(`/user/check/${phone}?device_id=${deviceId}`, {
-                credentials: 'include'
+            fetch('/api/whatsapp/check/number', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    deviceId: deviceId,
+                    phone: phone
+                })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.code === 'SUCCESS') {
+                    const result = data.results;
                     resultBox.className = 'result-box success-result';
                     resultBox.innerHTML = `
                         <i class="bi bi-check-circle"></i> Number Status:<br>
-                        Phone: ${data.results.phone}<br>
-                        Registered: ${data.results.registered ? 'Yes' : 'No'}<br>
-                        ${data.results.jid ? `JID: ${data.results.jid}` : ''}
+                        Phone: ${result.phone}<br>
+                        On WhatsApp: ${result.exists ? 'Yes' : 'No'}<br>
+                        ${result.jid ? `JID: ${result.jid}` : ''}
                     `;
                     addToLog(`Checked status for ${phone}`);
                 } else {
@@ -531,45 +549,37 @@
             resultBox.className = 'result-box';
             resultBox.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending broadcast...';
             
-            // Send to each number
-            let sent = 0;
-            let failed = 0;
-            
-            Promise.all(phones.map(phone => 
-                fetch('/send/message', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        device_id: deviceId,
-                        phone: phone,
-                        message: message
-                    })
+            // Use the broadcast API endpoint
+            fetch('/api/whatsapp/send/broadcast', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    deviceId: deviceId,
+                    phones: phones,
+                    message: message
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.code === 'SUCCESS') {
-                        sent++;
-                    } else {
-                        failed++;
-                    }
-                })
-                .catch(() => failed++)
-            ))
-            .then(() => {
-                if (failed === 0) {
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.code === 'SUCCESS') {
+                    const results = data.results;
                     resultBox.className = 'result-box success-result';
-                    resultBox.innerHTML = `<i class="bi bi-check-circle"></i> Broadcast sent to ${sent} numbers!`;
+                    resultBox.innerHTML = `<i class="bi bi-check-circle"></i> Broadcast complete! Sent: ${results.sent}, Failed: ${results.failed}`;
+                    addToLog(`Broadcast: ${results.sent} sent, ${results.failed} failed`);
                 } else {
                     resultBox.className = 'result-box error-result';
-                    resultBox.innerHTML = `<i class="bi bi-exclamation-circle"></i> Sent: ${sent}, Failed: ${failed}`;
+                    resultBox.innerHTML = `<i class="bi bi-x-circle"></i> Failed: ${data.message || 'Unknown error'}`;
                 }
-                addToLog(`Broadcast: ${sent} sent, ${failed} failed`);
                 
                 // Clear form
                 document.getElementById('sendBroadcastForm').reset();
+            })
+            .catch(error => {
+                resultBox.className = 'result-box error-result';
+                resultBox.innerHTML = `<i class="bi bi-x-circle"></i> Error: ${error.message}`;
             });
         }
         
