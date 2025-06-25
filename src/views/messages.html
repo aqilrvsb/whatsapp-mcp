@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages - WhatsApp Analytics</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --whatsapp-green: #25d366;
+            --whatsapp-dark: #075e54;
+            --whatsapp-light: #dcf8c6;
+            --sidebar-bg: #f0f2f5;
+            --chat-bg: #e5ddd5;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: var(--chat-bg);
+        }
+
+        .messages-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .chat-sidebar {
+            width: 30%;
+            min-width: 300px;
+            background: white;
+            border-right: 1px solid #d1d7db;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            background: #ededed;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+        }
+
+        .device-selector {
+            padding: 12px;
+            background: #f0f2f5;
+            border-bottom: 1px solid #d1d7db;
+        }
+
+        .search-bar {
+            padding: 8px 12px;
+            background: white;
+            border-bottom: 1px solid #d1d7db;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 8px 32px 8px 12px;
+            border: none;
+            background: #f0f2f5;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        .chat-list {
+            flex: 1;
+            overflow-y: auto;
+            background: white;
+        }
+
+        .chat-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #f0f2f5;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+
+        .chat-item:hover {
+            background: #f0f2f5;
+        }
+
+        .chat-item.active {
+            background: #e9edef;
+        }
+
+        .chat-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 20px;
+        }
+
+        .chat-info {
+            flex: 1;
+            margin-left: 12px;
+        }
+
+        .chat-name {
+            font-weight: 500;
+            color: #111b21;
+            margin-bottom: 2px;
+        }
+
+        .chat-last-message {
+            font-size: 13px;
+            color: #667781;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .chat-meta {
+            text-align: right;
+        }
+
+        .chat-time {
+            font-size: 12px;
+            color: #667781;
+        }
+
+        .unread-count {
+            background: var(--whatsapp-green);
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 11px;
+            margin-top: 4px;
+            display: inline-block;
+        }
+
+        /* Message Area */
+        .message-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-header {
+            background: #ededed;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            height: 60px;
+            border-bottom: 1px solid #d1d7db;
+        }
+
+        .messages-container-inner {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-image: url('https://web.whatsapp.com/img/bg-chat-tile-dark_a4be512e7195b6b733d9110b408f075d.png');
+            background-repeat: repeat;
+            background-size: 412px 412px;
+        }
+
+        .message {
+            max-width: 65%;
+            margin-bottom: 12px;
+            clear: both;
+        }
+
+        .message.sent {
+            float: right;
+        }
+
+        .message.received {
+            float: left;
+        }
+
+        .message-bubble {
+            padding: 8px 12px;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+        }
+
+        .message.sent .message-bubble {
+            background: var(--whatsapp-light);
+        }
+
+        .message.received .message-bubble {
+            background: white;
+        }
+
+        .message-text {
+            margin: 0;
+            word-wrap: break-word;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #667781;
+            margin-top: 4px;
+        }
+
+        .input-area {
+            background: #ededed;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .message-input {
+            flex: 1;
+            padding: 10px 12px;
+            border: none;
+            border-radius: 24px;
+            outline: none;
+            background: white;
+        }
+
+        .send-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--whatsapp-green);
+            border: none;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-button:hover {
+            background: var(--whatsapp-dark);
+        }
+
+        /* Empty State */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #667781;
+        }
+
+        .empty-state i {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        /* Loading */
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* Back button for mobile */
+        .back-button {
+            display: none;
+            background: none;
+            border: none;
+            color: #54656f;
+            font-size: 24px;
+            margin-right: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .chat-sidebar {
+                width: 100%;
+            }
+            
+            .message-area {
+                position: absolute;
+                top: 0;
+                left: 100%;
+                width: 100%;
+                transition: left 0.3s;
+            }
+            
+            .message-area.active {
+                left: 0;
+            }
+            
+            .back-button {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="messages-container">
+        <!-- Chat Sidebar -->
+        <div class="chat-sidebar">
+            <div class="sidebar-header">
+                <h5 class="mb-0">Messages</h5>
+                <a href="/dashboard" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back
+                </a>
+            </div>
+            
+            <!-- Device Selector -->
+            <div class="device-selector">
+                <select class="form-select" id="deviceSelector" onchange="loadChats()">
+                    <option value="">Select a device</option>
+                </select>
+            </div>
+            
+            <!-- Search Bar -->
+            <div class="search-bar">
+                <input type="text" class="search-input" placeholder="Search or start new chat" id="searchInput">
+            </div>
+            
+            <!-- Chat List -->
+            <div class="chat-list" id="chatList">
+                <!-- Chats will be loaded here -->
+            </div>
+        </div>
+        
+        <!-- Message Area -->
+        <div class="message-area" id="messageArea">
+            <div class="empty-state" id="emptyState">
+                <i class="bi bi-chat-text"></i>
+                <h5>Select a chat to view messages</h5>
+                <p>Choose a conversation from the left to start</p>
+            </div>
+            
+            <!-- Chat View (Hidden by default) -->
+            <div id="chatView" style="display: none; height: 100%; display: flex; flex-direction: column;">
+                <div class="message-header">
+                    <button class="back-button" onclick="closeChatView()">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <div class="chat-avatar" id="chatAvatar">
+                        <i class="bi bi-person"></i>
+                    </div>
+                    <div class="chat-info ms-3">
+                        <div class="chat-name" id="chatName">Loading...</div>
+                        <div class="chat-last-message" id="chatStatus">Click to view contact info</div>
+                    </div>
+                </div>
+                
+                <div class="messages-container-inner" id="messagesContainer">
+                    <!-- Messages will be loaded here -->
+                </div>
+                
+                <div class="input-area">
+                    <input type="text" class="message-input" id="messageInput" placeholder="Type a message">
+                    <button class="send-button" onclick="sendMessage()">
+                        <i class="bi bi-send-fill"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDevice = null;
+        let currentChat = null;
+        let chats = [];
+        let messages = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDevices();
+            setupSearch();
+            setupEnterToSend();
+        });
+
+        // Load user devices
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const selector = document.getElementById('deviceSelector');
+                    selector.innerHTML = '<option value="">Select a device</option>';
+                    
+                    data.devices.forEach(device => {
+                        if (device.status === 'online') {
+                            const option = document.createElement('option');
+                            option.value = device.id;
+                            option.textContent = `${device.device_name} (${device.phone || 'Not connected'})`;
+                            selector.appendChild(option);
+                        }
+                    });
+                    
+                    // Auto-select if only one device
+                    if (data.devices.filter(d => d.status === 'online').length === 1) {
+                        selector.selectedIndex = 1;
+                        loadChats();
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load devices:', error);
+            }
+        }
+
+        // Load chats for selected device
+        async function loadChats() {
+            const deviceId = document.getElementById('deviceSelector').value;
+            if (!deviceId) {
+                document.getElementById('chatList').innerHTML = '<div class="p-4 text-center text-muted">Select a device to view chats</div>';
+                return;
+            }
+            
+            currentDevice = deviceId;
+            document.getElementById('chatList').innerHTML = '<div class="loading-spinner"><div class="spinner-border"></div></div>';
+            
+            try {
+                const response = await fetch(`/api/devices/${deviceId}/chats`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    chats = data.chats;
+                    renderChats(chats);
+                } else {
+                    document.getElementById('chatList').innerHTML = `<div class="p-4 text-center text-danger">${data.error || 'Failed to load chats'}</div>`;
+                }
+            } catch (error) {
+                console.error('Failed to load chats:', error);
+                document.getElementById('chatList').innerHTML = '<div class="p-4 text-center text-danger">Error loading chats</div>';
+            }
+        }
+
+        // Render chat list
+        function renderChats(chatsToRender) {
+            const chatList = document.getElementById('chatList');
+            
+            if (chatsToRender.length === 0) {
+                chatList.innerHTML = '<div class="p-4 text-center text-muted">No chats found</div>';
+                return;
+            }
+            
+            chatList.innerHTML = chatsToRender.map(chat => {
+                const isGroup = chat.isGroup;
+                const icon = isGroup ? 'bi-people' : 'bi-person';
+                const time = chat.lastMessage ? formatTime(chat.lastMessage.messageTimestamp) : '';
+                
+                return `
+                    <div class="chat-item d-flex align-items-center ${currentChat === chat.id ? 'active' : ''}" onclick="selectChat('${chat.id}', '${escapeHtml(chat.name)}', ${isGroup})">
+                        <div class="chat-avatar">
+                            <i class="bi ${icon}"></i>
+                        </div>
+                        <div class="chat-info">
+                            <div class="chat-name">${escapeHtml(chat.name)}</div>
+                            <div class="chat-last-message">${chat.lastMessage ? escapeHtml(getMessagePreview(chat.lastMessage)) : 'No messages'}</div>
+                        </div>
+                        <div class="chat-meta">
+                            <div class="chat-time">${time}</div>
+                            ${chat.unreadCount > 0 ? `<div class="unread-count">${chat.unreadCount}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Select a chat
+        async function selectChat(chatId, chatName, isGroup) {
+            currentChat = chatId;
+            
+            // Update UI
+            document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            // Show chat view
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('chatView').style.display = 'flex';
+            
+            // Update chat header
+            document.getElementById('chatName').textContent = chatName;
+            document.getElementById('chatAvatar').innerHTML = `<i class="bi ${isGroup ? 'bi-people' : 'bi-person'}"></i>`;
+            document.getElementById('chatStatus').textContent = isGroup ? 'Group' : 'Contact';
+            
+            // Load messages
+            loadMessages();
+            
+            // Mobile view
+            if (window.innerWidth <= 768) {
+                document.getElementById('messageArea').classList.add('active');
+            }
+        }
+
+        // Load messages for selected chat
+        async function loadMessages() {
+            if (!currentDevice || !currentChat) return;
+            
+            document.getElementById('messagesContainer').innerHTML = '<div class="loading-spinner"><div class="spinner-border"></div></div>';
+            
+            try {
+                const response = await fetch(`/api/messages/${currentDevice}/chat/${currentChat}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    messages = data.messages;
+                    renderMessages(messages);
+                } else {
+                    document.getElementById('messagesContainer').innerHTML = `<div class="p-4 text-center text-danger">${data.error || 'Failed to load messages'}</div>`;
+                }
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+                document.getElementById('messagesContainer').innerHTML = '<div class="p-4 text-center text-danger">Error loading messages</div>';
+            }
+        }
+
+        // Render messages
+        function renderMessages(messagesToRender) {
+            const container = document.getElementById('messagesContainer');
+            
+            if (messagesToRender.length === 0) {
+                container.innerHTML = '<div class="p-4 text-center text-muted">No messages in this chat</div>';
+                return;
+            }
+            
+            container.innerHTML = messagesToRender.map(msg => {
+                const isSent = msg.key.fromMe;
+                const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '[Media]';
+                const time = formatTime(msg.messageTimestamp);
+                
+                return `
+                    <div class="message ${isSent ? 'sent' : 'received'}">
+                        <div class="message-bubble">
+                            <p class="message-text">${escapeHtml(text)}</p>
+                            <div class="message-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Send message
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message || !currentDevice || !currentChat) return;
+            
+            // Disable input while sending
+            input.disabled = true;
+            
+            try {
+                const response = await fetch(`/api/messages/${currentDevice}/send`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        to: currentChat,
+                        message: message
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    input.value = '';
+                    // Reload messages to show the sent message
+                    loadMessages();
+                } else {
+                    alert(data.error || 'Failed to send message');
+                }
+            } catch (error) {
+                console.error('Failed to send message:', error);
+                alert('Error sending message');
+            } finally {
+                input.disabled = false;
+                input.focus();
+            }
+        }
+
+        // Search functionality
+        function setupSearch() {
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const filtered = chats.filter(chat => 
+                    chat.name.toLowerCase().includes(query)
+                );
+                renderChats(filtered);
+            });
+        }
+
+        // Enter to send
+        function setupEnterToSend() {
+            document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        }
+
+        // Close chat view (mobile)
+        function closeChatView() {
+            document.getElementById('messageArea').classList.remove('active');
+        }
+
+        // Helper functions
+        function formatTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 86400000) { // Today
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            } else if (diff < 172800000) { // Yesterday
+                return 'Yesterday';
+            } else {
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+        }
+
+        function getMessagePreview(message) {
+            if (message.conversation) return message.conversation;
+            if (message.extendedTextMessage) return message.extendedTextMessage.text;
+            if (message.imageMessage) return '📷 Photo';
+            if (message.videoMessage) return '📹 Video';
+            if (message.audioMessage) return '🎵 Audio';
+            if (message.documentMessage) return '📄 Document';
+            return 'Message';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

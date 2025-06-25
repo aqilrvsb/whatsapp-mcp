@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Broadcast - WhatsApp Analytics</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #128c7e;
+            --primary-dark: #075e54;
+            --success: #25d366;
+            --light-bg: #f0f2f5;
+        }
+
+        body {
+            background-color: var(--light-bg);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .page-header {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            border-color: var(--primary-dark);
+        }
+
+        .recipient-tag {
+            display: inline-block;
+            background: #e9ecef;
+            padding: 4px 12px;
+            border-radius: 16px;
+            margin: 4px;
+            font-size: 14px;
+        }
+
+        .recipient-tag .remove {
+            margin-left: 8px;
+            cursor: pointer;
+            color: #dc3545;
+        }
+
+        .progress-card {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 350px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .campaign-item {
+            padding: 16px;
+            border-bottom: 1px solid #f0f2f5;
+            cursor: pointer;
+        }
+
+        .campaign-item:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.running {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .status-badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid p-4">
+        <div class="page-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">Broadcast Messages</h2>
+                    <p class="text-muted mb-0">Send bulk messages to multiple recipients</p>
+                </div>
+                <a href="/dashboard" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+                </a>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- New Broadcast Form -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Create New Broadcast</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="broadcastForm">
+                            <!-- Device Selection -->
+                            <div class="mb-3">
+                                <label class="form-label">Select Device</label>
+                                <select class="form-select" id="deviceSelect" required>
+                                    <option value="">Choose a device...</option>
+                                </select>
+                            </div>
+
+                            <!-- Campaign Name -->
+                            <div class="mb-3">
+                                <label class="form-label">Campaign Name</label>
+                                <input type="text" class="form-control" id="campaignName" placeholder="E.g., Holiday Promotion" required>
+                            </div>
+
+                            <!-- Message -->
+                            <div class="mb-3">
+                                <label class="form-label">Message</label>
+                                <textarea class="form-control" id="messageText" rows="4" placeholder="Type your message here..." required></textarea>
+                                <small class="text-muted">Tip: Keep messages under 1000 characters for better delivery</small>
+                            </div>
+
+                            <!-- Recipients -->
+                            <div class="mb-3">
+                                <label class="form-label">Recipients</label>
+                                <div class="input-group mb-2">
+                                    <input type="text" class="form-control" id="recipientInput" placeholder="Enter phone number (e.g., 60123456789)">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="addRecipient()">
+                                        <i class="bi bi-plus"></i> Add
+                                    </button>
+                                </div>
+                                <div id="recipientsList"></div>
+                                <small class="text-muted">Total recipients: <span id="recipientCount">0</span></small>
+                            </div>
+
+                            <!-- Import Options -->
+                            <div class="mb-3">
+                                <label class="form-label">Or Import Recipients</label>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-secondary" onclick="importFromContacts()">
+                                        <i class="bi bi-person-lines-fill me-2"></i>From Contacts
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="importFromCSV()">
+                                        <i class="bi bi-file-earmark-spreadsheet me-2"></i>From CSV
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Send Options -->
+                            <div class="mb-3">
+                                <label class="form-label">Send Options</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="randomDelay" checked>
+                                    <label class="form-check-label" for="randomDelay">
+                                        Add random delay between messages (3-8 seconds)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Submit Button -->
+                            <button type="submit" class="btn btn-primary w-100" id="sendButton">
+                                <i class="bi bi-send me-2"></i>Start Broadcast
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Campaigns -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Campaigns</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="campaignsList">
+                            <!-- Campaigns will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Card -->
+    <div class="card progress-card" id="progressCard">
+        <div class="card-body">
+            <h6 class="mb-3">Broadcast Progress</h6>
+            <div class="progress mb-2">
+                <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+            </div>
+            <small class="text-muted">
+                Sent: <span id="sentCount">0</span> / <span id="totalCount">0</span>
+                (Failed: <span id="failedCount">0</span>)
+            </small>
+        </div>
+    </div>
+
+    <!-- Contacts Modal -->
+    <div class="modal fade" id="contactsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Select Contacts</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" class="form-control mb-3" id="contactSearch" placeholder="Search contacts...">
+                    <div id="contactsList" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Contacts will be loaded here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="addSelectedContacts()">Add Selected</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let recipients = new Set();
+        let devices = [];
+        let campaigns = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDevices();
+            loadCampaigns();
+            setupForm();
+        });
+
+        // Load devices
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                const data = await response.json();
+                
+                if (data.success) {
+                    devices = data.devices.filter(d => d.status === 'online');
+                    const select = document.getElementById('deviceSelect');
+                    
+                    devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.textContent = `${device.device_name} (${device.phone || 'Not connected'})`;
+                        select.appendChild(option);
+                    });
+                    
+                    if (devices.length === 1) {
+                        select.selectedIndex = 1;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load devices:', error);
+            }
+        }
+
+        // Load campaigns
+        async function loadCampaigns() {
+            try {
+                const response = await fetch('/api/analytics/campaigns?limit=10');
+                const data = await response.json();
+                
+                if (data.success) {
+                    campaigns = data.campaigns;
+                    renderCampaigns();
+                }
+            } catch (error) {
+                console.error('Failed to load campaigns:', error);
+            }
+        }
+
+        // Render campaigns
+        function renderCampaigns() {
+            const container = document.getElementById('campaignsList');
+            
+            if (campaigns.length === 0) {
+                container.innerHTML = '<div class="p-4 text-center text-muted">No campaigns yet</div>';
+                return;
+            }
+            
+            container.innerHTML = campaigns.map(campaign => `
+                <div class="campaign-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="mb-1">${escapeHtml(campaign.name)}</h6>
+                            <p class="text-muted mb-1 small">${escapeHtml(campaign.message.substring(0, 50))}...</p>
+                            <small class="text-muted">
+                                <i class="bi bi-people me-1"></i>${campaign.recipients_count} recipients
+                                • ${new Date(campaign.created_at).toLocaleDateString()}
+                            </small>
+                        </div>
+                        <span class="status-badge ${campaign.status}">${campaign.status}</span>
+                    </div>
+                    <div class="mt-2">
+                        <small>
+                            <span class="text-success"><i class="bi bi-check-circle"></i> ${campaign.sent_count} sent</span>
+                            ${campaign.failed_count > 0 ? `<span class="text-danger ms-3"><i class="bi bi-x-circle"></i> ${campaign.failed_count} failed</span>` : ''}
+                        </small>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Setup form
+        function setupForm() {
+            document.getElementById('broadcastForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                if (recipients.size === 0) {
+                    alert('Please add at least one recipient');
+                    return;
+                }
+                
+                const deviceId = document.getElementById('deviceSelect').value;
+                const campaignName = document.getElementById('campaignName').value;
+                const message = document.getElementById('messageText').value;
+                
+                if (!deviceId) {
+                    alert('Please select a device');
+                    return;
+                }
+                
+                // Disable form
+                document.getElementById('sendButton').disabled = true;
+                
+                // Show progress
+                document.getElementById('progressCard').style.display = 'block';
+                document.getElementById('totalCount').textContent = recipients.size;
+                
+                try {
+                    const response = await fetch(`/api/messages/${deviceId}/broadcast`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            campaignName,
+                            message,
+                            recipients: Array.from(recipients)
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        alert(`Broadcast completed! Sent: ${data.sent}, Failed: ${data.failed}`);
+                        resetForm();
+                        loadCampaigns();
+                    } else {
+                        alert(data.error || 'Broadcast failed');
+                    }
+                } catch (error) {
+                    console.error('Broadcast error:', error);
+                    alert('Error sending broadcast');
+                } finally {
+                    document.getElementById('sendButton').disabled = false;
+                    setTimeout(() => {
+                        document.getElementById('progressCard').style.display = 'none';
+                    }, 5000);
+                }
+            });
+        }
+
+        // Add recipient
+        function addRecipient() {
+            const input = document.getElementById('recipientInput');
+            const phone = input.value.trim().replace(/\D/g, '');
+            
+            if (!phone) {
+                alert('Please enter a phone number');
+                return;
+            }
+            
+            if (recipients.has(phone)) {
+                alert('This number is already added');
+                return;
+            }
+            
+            recipients.add(phone);
+            input.value = '';
+            updateRecipientsList();
+        }
+
+        // Update recipients list
+        function updateRecipientsList() {
+            const container = document.getElementById('recipientsList');
+            document.getElementById('recipientCount').textContent = recipients.size;
+            
+            if (recipients.size === 0) {
+                container.innerHTML = '<p class="text-muted">No recipients added yet</p>';
+                return;
+            }
+            
+            container.innerHTML = Array.from(recipients).map(phone => `
+                <span class="recipient-tag">
+                    ${phone}
+                    <span class="remove" onclick="removeRecipient('${phone}')">&times;</span>
+                </span>
+            `).join('');
+        }
+
+        // Remove recipient
+        function removeRecipient(phone) {
+            recipients.delete(phone);
+            updateRecipientsList();
+        }
+
+        // Import from contacts
+        async function importFromContacts() {
+            const deviceId = document.getElementById('deviceSelect').value;
+            if (!deviceId) {
+                alert('Please select a device first');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/devices/${deviceId}/contacts`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    showContactsModal(data.contacts);
+                } else {
+                    alert(data.error || 'Failed to load contacts');
+                }
+            } catch (error) {
+                console.error('Failed to load contacts:', error);
+                alert('Error loading contacts');
+            }
+        }
+
+        // Show contacts modal
+        function showContactsModal(contacts) {
+            const modal = new bootstrap.Modal(document.getElementById('contactsModal'));
+            const container = document.getElementById('contactsList');
+            
+            container.innerHTML = contacts.map(contact => `
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="${contact.phone}" id="contact_${contact.phone}">
+                    <label class="form-check-label" for="contact_${contact.phone}">
+                        ${escapeHtml(contact.name)} (${contact.phone})
+                    </label>
+                </div>
+            `).join('');
+            
+            modal.show();
+        }
+
+        // Add selected contacts
+        function addSelectedContacts() {
+            const checkboxes = document.querySelectorAll('#contactsList input[type="checkbox"]:checked');
+            checkboxes.forEach(cb => recipients.add(cb.value));
+            updateRecipientsList();
+            bootstrap.Modal.getInstance(document.getElementById('contactsModal')).hide();
+        }
+
+        // Import from CSV
+        function importFromCSV() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const text = await file.text();
+                const lines = text.split('\n');
+                
+                lines.forEach(line => {
+                    const phone = line.trim().replace(/\D/g, '');
+                    if (phone) recipients.add(phone);
+                });
+                
+                updateRecipientsList();
+            };
+            input.click();
+        }
+
+        // Reset form
+        function resetForm() {
+            document.getElementById('broadcastForm').reset();
+            recipients.clear();
+            updateRecipientsList();
+        }
+
+        // WebSocket for progress updates
+        const socket = io();
+        socket.on('broadcast-progress', (data) => {
+            document.getElementById('progressBar').style.width = `${(data.current / data.total) * 100}%`;
+            document.getElementById('sentCount').textContent = data.sent;
+            document.getElementById('failedCount').textContent = data.failed;
+        });
+
+        // Helper function
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

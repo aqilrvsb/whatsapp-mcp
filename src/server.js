@@ -103,6 +103,20 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'dashboard.html'));
 });
 
+app.get('/messages', (req, res) => {
+    if (!req.session.userId) {
+        return res.redirect('/login');
+    }
+    res.sendFile(path.join(__dirname, 'views', 'messages.html'));
+});
+
+app.get('/broadcast', (req, res) => {
+    if (!req.session.userId) {
+        return res.redirect('/login');
+    }
+    res.sendFile(path.join(__dirname, 'views', 'broadcast.html'));
+});
+
 app.get('/logout', (req, res) => {
     req.session.destroy();
     res.redirect('/login');

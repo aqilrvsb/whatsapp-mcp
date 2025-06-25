@@ -397,6 +397,16 @@
 
         // Show page
         function showPage(page) {
+            // For messages and broadcast, redirect to their own pages
+            if (page === 'messages') {
+                window.location.href = '/messages';
+                return;
+            }
+            if (page === 'broadcast') {
+                window.location.href = '/broadcast';
+                return;
+            }
+            
             // Hide all pages
             document.querySelectorAll('.page-content').forEach(p => {
                 p.style.display = 'none';
