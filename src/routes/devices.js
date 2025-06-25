@@ -67,10 +67,16 @@ router.get('/:id', async (req, res) => {
         
         const device = await userRepo.getDevice(id);
         if (!device) {
-            return res.status(404).json({ error: 'Device not found' });
+            return res.status(404).json({ 
+                code: 'ERROR',
+                message: 'Device not found' 
+            });
         }
         
-        res.json(device);
+        res.json({
+            code: 'SUCCESS',
+            results: device
+        });
     } catch (error) {
         console.error('Error getting device:', error);
         res.status(500).json({ error: 'Failed to get device' });

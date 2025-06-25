@@ -113,6 +113,7 @@ app.use('/api/messages', requireAuth, messageRoutes);
 app.use('/api/analytics', requireAuth, analyticsRoutes);
 app.use('/api/campaigns', requireAuth, require('./routes/campaigns'));
 app.use('/api/whatsapp', requireAuth, require('./routes/whatsapp-api'));
+app.use('/api/debug', requireAuth, require('./routes/debug'));
 
 // WhatsApp app routes (login, logout, etc)
 app.use('/app', requireAuth, require('./routes/whatsapp'));

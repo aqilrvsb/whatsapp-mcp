@@ -287,10 +287,10 @@
                     return response.json();
                 })
                 .then(data => {
-                    // Handle both wrapped and unwrapped responses
-                    const device = data.results || data;
-                    
-                    if (device) {
+                    // Handle wrapped response
+                    if (data.code === 'SUCCESS' && data.results) {
+                        const device = data.results;
+                        
                         document.getElementById('deviceName').textContent = device.deviceName || 'Unknown Device';
                         document.getElementById('devicePhone').textContent = device.phone || 'Not connected';
                         
@@ -299,6 +299,20 @@
                         
                         if (device.status !== 'online') {
                             showWarning('This device is not connected. Please connect it first from the Devices tab.');
+                        }
+                    } else {
+                        // Handle unwrapped response for backward compatibility
+                        const device = data;
+                        if (device && device.id) {
+                            document.getElementById('deviceName').textContent = device.deviceName || 'Unknown Device';
+                            document.getElementById('devicePhone').textContent = device.phone || 'Not connected';
+                            
+                            const statusEl = document.getElementById('deviceStatus');
+                            statusEl.className = `device-status ${device.status}`;
+                            
+                            if (device.status !== 'online') {
+                                showWarning('This device is not connected. Please connect it first from the Devices tab.');
+                            }
                         }
                     }
                 })
