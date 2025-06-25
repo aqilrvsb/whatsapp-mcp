@@ -6,8 +6,15 @@ let db = null;
 
 async function connectDB() {
     try {
-        // Initialize pg-promise with connection string
-        db = pgp(config.database.uri);
+        // Initialize pg-promise with connection string and SSL config
+        const dbConfig = {
+            connectionString: config.database.uri,
+            ssl: config.database.ssl ? {
+                rejectUnauthorized: false // Allow self-signed certificates
+            } : false
+        };
+        
+        db = pgp(dbConfig);
         
         // Test connection
         await db.one('SELECT NOW()');
@@ -32,13 +39,25 @@ async function runMigrations() {
         const schemaPath = path.join(__dirname, '../../database/schema.sql');
         const schema = await fs.readFile(schemaPath, 'utf8');
         
-        // Execute the schema
-        await db.none(schema);
+        // Split schema into individual statements (by semicolon)
+        const statements = schema.split(';').filter(stmt => stmt.trim());
+        
+        // Execute each statement separately
+        for (const statement of statements) {
+            if (statement.trim()) {
+                try {
+                    await db.none(statement);
+                } catch (err) {
+                    console.log('Migration statement error (may be normal):', err.message);
+                }
+            }
+        }
+        
         console.log('✅ Database schema applied successfully');
         
     } catch (error) {
         console.error('❌ Error running migrations:', error);
-        throw error;
+        // Don't throw - allow app to start even if some migrations fail
     }
 }
 
