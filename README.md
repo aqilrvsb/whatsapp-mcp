@@ -1,7 +1,8 @@
 # WhatsApp MCP - Multi-Device WhatsApp Analytics & Management
 
 **Last Updated: June 27, 2025 - Full WhatsApp Integration Complete**  
-**Status: ✅ All features working - QR Code, Messaging, WhatsApp Web View**
+**Status: ✅ All features working - QR Code, Messaging, WhatsApp Web View**  
+**Railway Deploy: Triggered**
 
 ## 🎯 Latest Updates (June 27, 2025)
 
