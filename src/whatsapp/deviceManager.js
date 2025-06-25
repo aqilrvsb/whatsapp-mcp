@@ -1,4 +1,4 @@
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeInMemoryStore } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const path = require('path');
@@ -43,6 +43,11 @@ class WhatsAppManager {
             const { version } = await fetchLatestBaileysVersion();
             console.log(`Using WA version: ${version}`);
 
+            // Create in-memory store
+            const store = makeInMemoryStore({
+                logger: pino({ level: 'silent' })
+            });
+
             // Create WhatsApp socket with proper configuration
             const sock = makeWASocket({
                 version,
@@ -55,16 +60,23 @@ class WhatsAppManager {
                 defaultQueryTimeoutMs: undefined,
                 keepAliveIntervalMs: 10000,
                 generateHighQualityLinkPreview: false,
-                syncFullHistory: false,
+                syncFullHistory: true, // Enable to get chats
                 markOnlineOnConnect: true,
                 // Add connection retry config
                 retryRequestDelayMs: 2000,
                 maxMsgRetryCount: 5,
                 // Ensure connection stays stable
                 getMessage: async (key) => {
+                    if (store) {
+                        const msg = await store.loadMessage(key.remoteJid, key.id);
+                        return msg?.message || { conversation: 'Hello' };
+                    }
                     return { conversation: 'Hello' };
                 }
             });
+
+            // Bind store to socket
+            store.bind(sock.ev);
 
             // Store client
             this.clients.set(deviceId, sock);
@@ -189,8 +201,8 @@ class WhatsAppManager {
                 }
             }, 30000); // Every 30 seconds
             
-            // Store client with keepAlive reference
-            this.clients.set(deviceId, { sock, keepAlive });
+            // Store client with keepAlive reference and store
+            this.clients.set(deviceId, { sock, keepAlive, store });
 
         } catch (error) {
             console.error(`Error connecting device ${deviceId}:`, error);
@@ -238,7 +250,12 @@ class WhatsAppManager {
     getClient(deviceId) {
         const clientData = this.clients.get(deviceId);
         if (clientData) {
-            return clientData.sock || clientData;
+            const client = clientData.sock || clientData;
+            // Attach store to client if available
+            if (clientData.store && client) {
+                client.store = clientData.store;
+            }
+            return client;
         }
         return null;
     }
