@@ -54,7 +54,7 @@ class WhatsAppManager {
                 auth: state,
                 logger: pino({ level: 'silent' }), // Reduce logging
                 printQRInTerminal: false,
-                browser: ['Chrome (Linux)', '', ''], // More realistic browser
+                browser: ['WhatsApp MCP', 'Chrome', '3.0'], // Custom browser name
                 connectTimeoutMs: 60000,
                 qrTimeout: 120000, // 2 minutes
                 defaultQueryTimeoutMs: undefined,
@@ -102,11 +102,20 @@ class WhatsAppManager {
                             scale: 8
                         });
                         
+                        console.log(`QR data URL generated for device ${deviceId}, length: ${qrDataUrl.length}`);
+                        
                         // Send QR to frontend with data URL
                         this.io.emit('qr', { 
                             deviceId, 
                             qr: qrDataUrl,
                             rawQr: qr // Also send raw QR for backup
+                        });
+                        
+                        // Also emit to specific room if available
+                        this.io.to(`device-${deviceId}`).emit('qr', { 
+                            deviceId, 
+                            qr: qrDataUrl,
+                            rawQr: qr
                         });
                         
                         // Store for API access
@@ -128,6 +137,10 @@ class WhatsAppManager {
                         this.qrTimeouts.set(deviceId, timeout);
                     } catch (error) {
                         console.error('Error generating QR code:', error);
+                        this.io.emit('qr-error', { 
+                            deviceId, 
+                            error: 'Failed to generate QR code' 
+                        });
                     }
                 }
 
