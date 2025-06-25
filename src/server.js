@@ -169,8 +169,12 @@ app.get('/device/:id/whatsapp-web', requireAuth, async (req, res) => {
             return res.status(404).send('Device not found');
         }
         
-        // For now, redirect to a placeholder or WhatsApp Web
-        res.redirect('https://web.whatsapp.com');
+        // Render our custom WhatsApp Web view
+        res.render('whatsapp', {
+            title: 'WhatsApp Web - ' + device.deviceName,
+            device: device,
+            user: req.user
+        });
     } catch (error) {
         console.error('WhatsApp Web error:', error);
         res.status(500).send('Internal server error');
@@ -243,6 +247,12 @@ async function startServer() {
         // Initialize WhatsApp manager with database
         const { WhatsAppManager } = require('./whatsapp/deviceManager');
         global.whatsappManager = new WhatsAppManager(io);
+        
+        // Auto-reconnect devices after a short delay
+        setTimeout(async () => {
+            const { reconnectDevices } = require('./whatsapp/autoReconnect');
+            await reconnectDevices();
+        }, 5000); // Wait 5 seconds for server to fully initialize
         
         // Start server
         const PORT = process.env.PORT || config.app.port;

@@ -1107,7 +1107,7 @@
                                     <i class="bi bi-phone-fill" style="font-size: 24px; color: ${isConnected ? 'var(--success)' : '#6c757d'};"></i>
                                 </div>
                                 <div>
-                                    <h5 class="mb-1">${device.name}</h5>
+                                    <h5 class="mb-1">${device.deviceName || 'Unnamed Device'}</h5>
                                     <div class="d-flex align-items-center">
                                         <span class="device-status ${device.status}"></span>
                                         <span class="text-muted small">${isConnected ? 'Connected' : 'Disconnected'}</span>
@@ -1731,7 +1731,7 @@
             devices.forEach(device => {
                 const option = document.createElement('option');
                 option.value = device.id;
-                option.textContent = `${device.name} (${device.phone})`;
+                option.textContent = `${device.deviceName || 'Unnamed'} (${device.phone || 'No phone'})`;
                 deviceFilter.appendChild(option);
             });
             
@@ -1828,7 +1828,7 @@
             devices.forEach(device => {
                 const option = document.createElement('option');
                 option.value = device.id;
-                option.textContent = `${device.name} (${device.phone})`;
+                option.textContent = `${device.deviceName || 'Unnamed'} (${device.phone || 'No phone'})`;
                 deviceFilter.appendChild(option);
             });
             
@@ -2063,15 +2063,20 @@
             fetch('/api/campaigns', { credentials: 'include' })
                 .then(response => response.json())
                 .then(data => {
+                    console.log('Campaign API response:', data);
                     if (data.code === 'SUCCESS' && Array.isArray(data.results)) {
                         campaigns = {};
+                        console.log('Processing campaigns:', data.results.length);
                         // Group campaigns by date
                         data.results.forEach(campaign => {
-                            if (!campaigns[campaign.campaign_date]) {
-                                campaigns[campaign.campaign_date] = [];
+                            // Ensure date is in YYYY-MM-DD format
+                            const date = campaign.campaign_date.split('T')[0];
+                            if (!campaigns[date]) {
+                                campaigns[date] = [];
                             }
-                            campaigns[campaign.campaign_date].push(campaign);
+                            campaigns[date].push(campaign);
                         });
+                        console.log('Grouped campaigns:', campaigns);
                         renderCalendar();
                     }
                 })
