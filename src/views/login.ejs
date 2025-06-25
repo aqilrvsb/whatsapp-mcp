@@ -4,114 +4,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/semantic-ui/dist/semantic.min.css">
+    <script src="https://unpkg.com/jquery@3.3.1/dist/jquery.js"></script>
+    <script src="https://unpkg.com/semantic-ui/dist/semantic.min.js"></script>
     <style>
-        :root {
-            --primary: #128c7e;
-            --primary-dark: #075e54;
-            --success: #25d366;
-        }
-
         body {
-            background-color: #f0f2f5;
-            height: 100vh;
+            background-color: #f5f5f5;
             display: flex;
             align-items: center;
             justify-content: center;
+            height: 100vh;
         }
-
         .login-container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-        }
-        .logo {
-            text-align: center;
-            margin-bottom: 32px;
-        }
-
-        .logo i {
-            font-size: 64px;
-            color: var(--primary);
-        }
-
-        .logo h3 {
-            color: var(--primary-dark);
-            margin-top: 16px;
-            font-weight: 600;
-        }
-
-        .form-control {
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
-            padding: 12px 16px;
-            font-size: 15px;
-        }
-
-        .form-control:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 0.2rem rgba(18, 140, 126, 0.1);
-        }
-
-        .btn-login {
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px;
-            font-weight: 500;
-            width: 100%;
-            font-size: 16px;
-            transition: all 0.3s;
-        }
-
-        .btn-login:hover {
-            background-color: var(--primary-dark);
-            color: white;
-            transform: translateY(-1px);
-        }
-
-        .alert {
-            border-radius: 8px;
-            font-size: 14px;
+            width: 400px;
         }
     </style>
-</head><body>
+</head>
+<body>
     <div class="login-container">
-        <div class="logo">
-            <i class="bi bi-whatsapp"></i>
-            <h3>WhatsApp Analytics</h3>
-            <p class="text-muted">Multi-user analytics dashboard</p>
-        </div>
-
-        <form id="loginForm" onsubmit="handleLogin(event)">
-            <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-control" id="email" required>
+        <div class="ui segment">
+            <h2 class="ui center aligned header" style="color: #128c7e;">
+                <i class="whatsapp icon"></i>
+                <div class="content">
+                    WhatsApp Analytics
+                    <div class="sub header">Multi-user analytics dashboard</div>
+                </div>
+            </h2>
+            
+            <form class="ui form" id="loginForm" onsubmit="handleLogin(event)">
+                <div class="field">
+                    <label>Email</label>
+                    <input type="email" id="email" placeholder="Email" required>
+                </div>
+                <div class="field">
+                    <label>Password</label>
+                    <input type="password" id="password" placeholder="Password" required>
+                </div>
+                <button class="ui fluid large primary button" type="submit">
+                    <i class="sign in icon"></i> Login
+                </button>
+            </form>
+            
+            <div class="ui message" id="errorMessage" style="display: none;">
+                <p></p>
             </div>
             
-            <div class="mb-3">
-                <label class="form-label">Password</label>
-                <input type="password" class="form-control" id="password" required>
+            <div class="ui divider"></div>
+            
+            <div class="ui center aligned basic segment">
+                Don't have an account? <a href="/register" style="color: #128c7e;">Register here</a>
             </div>
-
-            <div id="errorAlert" class="alert alert-danger d-none" role="alert">
-                Invalid email or password
-            </div>
-
-            <button type="submit" class="btn btn-login">
-                <i class="bi bi-box-arrow-in-right"></i> Login
-            </button>
-        </form>
-
-        <div class="text-center mt-3">
-            <small class="text-muted">Don't have an account? <a href="/register" style="color: var(--primary); text-decoration: none;">Register here</a></small>
         </div>
     </div>
+
     <script>
         function handleLogin(event) {
             event.preventDefault();
@@ -119,7 +64,10 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             
-            // Call login API (updated endpoint to match our routes)
+            // Show loading
+            const button = event.target.querySelector('button');
+            button.classList.add('loading');
+            
             fetch('/api/auth/login', {
                 method: 'POST',
                 headers: {
@@ -129,25 +77,22 @@
             })
             .then(response => response.json())
             .then(data => {
+                button.classList.remove('loading');
+                
                 if (data.status === 'success') {
-                    // Cookies are set server-side, just redirect
                     window.location.href = '/dashboard';
                 } else {
-                    // Show error
-                    document.getElementById('errorAlert').classList.remove('d-none');
-                    document.getElementById('errorAlert').textContent = data.error || 'Invalid email or password';
-                    setTimeout(() => {
-                        document.getElementById('errorAlert').classList.add('d-none');
-                    }, 3000);
+                    const errorDiv = document.getElementById('errorMessage');
+                    errorDiv.style.display = 'block';
+                    errorDiv.querySelector('p').textContent = data.error || 'Invalid email or password';
                 }
             })
             .catch(error => {
+                button.classList.remove('loading');
                 console.error('Login error:', error);
-                document.getElementById('errorAlert').classList.remove('d-none');
-                document.getElementById('errorAlert').textContent = 'Login failed. Please try again.';
-                setTimeout(() => {
-                    document.getElementById('errorAlert').classList.add('d-none');
-                }, 3000);
+                const errorDiv = document.getElementById('errorMessage');
+                errorDiv.style.display = 'block';
+                errorDiv.querySelector('p').textContent = 'Login failed. Please try again.';
             });
         }
     </script>
