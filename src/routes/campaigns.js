@@ -58,10 +58,21 @@ router.post('/', async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating campaign:', error);
-        res.status(500).json({ 
-            code: 'ERROR',
-            message: 'Failed to create campaign' 
-        });
+        console.error('Detailed error:', error.message);
+        console.error('Error code:', error.code);
+        
+        // Check for specific database errors
+        if (error.code === '23505') {
+            res.status(400).json({ 
+                code: 'ERROR',
+                message: 'A campaign already exists for this date. Please run the database fix: psql -U postgres -d whatsapp_mcp -f fixes/fix-campaigns-constraint.sql' 
+            });
+        } else {
+            res.status(500).json({ 
+                code: 'ERROR',
+                message: 'Failed to create campaign: ' + (error.message || 'Unknown error')
+            });
+        }
     }
 });
 

@@ -1320,7 +1320,7 @@
                             <div class="text-center">
                                 <i class="bi bi-exclamation-triangle text-warning" style="font-size: 48px;"></i>
                                 <p class="mt-2">Failed to load QR code</p>
-                                <button class="btn btn-sm btn-primary" onclick="scanQR(${deviceId})">Retry</button>
+                                <button class="btn btn-sm btn-primary" onclick="scanQR('${deviceId}')">Retry</button>
                             </div>
                         `;
                     }
@@ -1331,7 +1331,7 @@
                         <div class="text-center">
                             <i class="bi bi-wifi-off text-danger" style="font-size: 48px;"></i>
                             <p class="mt-2">Connection error</p>
-                            <button class="btn btn-sm btn-primary" onclick="scanQR(${deviceId})">Retry</button>
+                            <button class="btn btn-sm btn-primary" onclick="scanQR('${deviceId}')">Retry</button>
                         </div>
                     `;
                 });
