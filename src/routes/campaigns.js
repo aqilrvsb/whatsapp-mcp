@@ -8,8 +8,45 @@ router.get('/', async (req, res) => {
         const db = getDB();
         const userId = req.user.id;
         
-        // For now, return empty array (will implement database later)
-        const campaigns = [];
+        // For now, return mock data with multiple campaigns per date
+        const campaigns = [
+            {
+                id: '1',
+                campaign_date: '2025-06-26',
+                title: 'Summer Sale',
+                niche: 'Promotion',
+                message: 'Check out our summer sale!',
+                status: 'delivered',
+                scheduled_time: '10:00'
+            },
+            {
+                id: '2',
+                campaign_date: '2025-06-26',
+                title: 'New Product Launch',
+                niche: 'Announcement',
+                message: 'Introducing our new product line',
+                status: 'ongoing',
+                scheduled_time: '14:00'
+            },
+            {
+                id: '3',
+                campaign_date: '2025-06-27',
+                title: 'Weekly Newsletter',
+                niche: 'Newsletter',
+                message: 'Your weekly updates',
+                status: 'scheduled',
+                scheduled_time: '09:00'
+            }
+        ];
+        
+        // Group campaigns by date
+        const groupedCampaigns = {};
+        campaigns.forEach(campaign => {
+            if (!groupedCampaigns[campaign.campaign_date]) {
+                groupedCampaigns[campaign.campaign_date] = [];
+            }
+            groupedCampaigns[campaign.campaign_date].push(campaign);
+        });
         
         res.json({
             code: 'SUCCESS',

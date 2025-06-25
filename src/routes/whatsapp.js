@@ -7,13 +7,19 @@ router.get('/login', async (req, res) => {
     try {
         const { deviceId } = req.query;
         
-        // Generate mock QR code for now
-        const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=WhatsApp_Device_${deviceId}_${Date.now()}`;
+        // Generate a more realistic WhatsApp QR code format
+        // In production, this would come from the actual WhatsApp connection
+        const timestamp = Date.now();
+        const qrData = `2@${Buffer.from(`whatsapp_${deviceId}_${timestamp}`).toString('base64')},${timestamp},${deviceId}==`;
+        
+        // Generate QR code using qr-server API
+        const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrData)}&color=128c7e`;
         
         res.json({
             code: 'SUCCESS',
             results: {
-                qr_link: qrLink
+                qr_link: qrLink,
+                qr_data: qrData
             }
         });
     } catch (error) {
@@ -37,13 +43,16 @@ router.get('/login-with-code', async (req, res) => {
             });
         }
         
-        // Generate mock pairing code
-        const pairCode = Math.random().toString().substr(2, 8);
+        // Generate realistic WhatsApp pairing code format (XXXX-XXXX)
+        const part1 = Math.floor(Math.random() * 9000 + 1000).toString();
+        const part2 = Math.floor(Math.random() * 9000 + 1000).toString();
+        const pairCode = `${part1}-${part2}`;
         
         res.json({
             code: 'SUCCESS',
             results: {
-                pair_code: pairCode
+                pair_code: pairCode,
+                expires_in: 60 // seconds
             }
         });
     } catch (error) {

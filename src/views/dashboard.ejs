@@ -300,6 +300,41 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        
+        .campaign-item .status-icon {
+            font-size: 8px;
+            margin-right: 2px;
+        }
+        
+        .campaign-item .action-icons {
+            display: none;
+            position: absolute;
+            right: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.9);
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+        
+        .campaign-item:hover .action-icons {
+            display: flex;
+            gap: 2px;
+        }
+        
+        .campaign-item .action-icons i {
+            font-size: 8px;
+            color: var(--primary);
+            cursor: pointer;
+        }
+        
+        .campaign-item .action-icons i:hover {
+            color: var(--primary-dark);
         }
     </style>
 </head>
@@ -1565,6 +1600,11 @@
 
         // WebSocket Connection for Real-time Updates
         function connectWebSocket() {
+            // For now, disable WebSocket to avoid errors
+            // Will implement proper Socket.IO connection later
+            console.log('WebSocket temporarily disabled - using polling instead');
+            return;
+            
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
             
@@ -1920,7 +1960,27 @@
                 let campaignHTML = '';
                 if (Array.isArray(dayCampaigns)) {
                     dayCampaigns.slice(0, 5).forEach(campaign => {
-                        campaignHTML += `<div class="campaign-item" title="${campaign.title}">${campaign.niche || campaign.title}</div>`;
+                        // Determine status icon
+                        let statusIcon = '';
+                        if (campaign.status === 'delivered') {
+                            statusIcon = '<i class="bi bi-check-circle-fill status-icon" style="color: #25d366;"></i>';
+                        } else if (campaign.status === 'failed' || campaign.status === 'cancelled') {
+                            statusIcon = '<i class="bi bi-x-circle-fill status-icon" style="color: #e74c3c;"></i>';
+                        } else if (campaign.status === 'ongoing' || campaign.status === 'sending') {
+                            statusIcon = '<i class="bi bi-arrow-repeat status-icon" style="color: #f39c12;"></i>';
+                        } else {
+                            statusIcon = '<i class="bi bi-clock-fill status-icon" style="color: #95a5a6;"></i>';
+                        }
+                        
+                        campaignHTML += `
+                            <div class="campaign-item" title="${campaign.title}">
+                                ${statusIcon}
+                                <span>${campaign.niche || campaign.title}</span>
+                                <div class="action-icons">
+                                    <i class="bi bi-pencil" onclick="editCampaign(event, '${campaign.id}', '${dateStr}')" title="Edit"></i>
+                                    <i class="bi bi-trash" onclick="deleteCampaign(event, '${campaign.id}')" title="Delete"></i>
+                                </div>
+                            </div>`;
                     });
                 }
                 
@@ -1968,8 +2028,12 @@
                 .then(data => {
                     if (data.code === 'SUCCESS' && Array.isArray(data.results)) {
                         campaigns = {};
+                        // Group campaigns by date
                         data.results.forEach(campaign => {
-                            campaigns[campaign.campaign_date] = campaign;
+                            if (!campaigns[campaign.campaign_date]) {
+                                campaigns[campaign.campaign_date] = [];
+                            }
+                            campaigns[campaign.campaign_date].push(campaign);
                         });
                         renderCalendar();
                     }
@@ -2125,6 +2189,52 @@
             // Open WhatsApp Web in a new tab
             // This would open a dedicated WhatsApp Web instance for this device
             window.open(`/device/${deviceId}/whatsapp-web`, '_blank');
+        }
+        
+        // Edit Campaign
+        function editCampaign(event, campaignId, dateStr) {
+            event.stopPropagation(); // Prevent opening create modal
+            
+            const campaign = campaigns[dateStr];
+            if (campaign) {
+                document.getElementById('campaignId').value = campaign.id;
+                document.getElementById('campaignDate').value = dateStr;
+                document.getElementById('campaignTitle').value = campaign.title;
+                document.getElementById('campaignNiche').value = campaign.niche || '';
+                document.getElementById('campaignMessage').value = campaign.message;
+                document.getElementById('campaignImageUrl').value = campaign.image_url || '';
+                document.getElementById('campaignTime').value = campaign.scheduled_time || '';
+                
+                document.getElementById('campaignModalTitle').textContent = `Edit Campaign - ${new Date(dateStr).toLocaleDateString()}`;
+                
+                const modal = new bootstrap.Modal(document.getElementById('campaignModal'));
+                modal.show();
+            }
+        }
+        
+        // Delete Campaign
+        function deleteCampaign(event, campaignId) {
+            event.stopPropagation(); // Prevent opening create modal
+            
+            if (confirm('Are you sure you want to delete this campaign?')) {
+                fetch(`/api/campaigns/${campaignId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.code === 'SUCCESS') {
+                        showAlert('success', 'Campaign deleted successfully');
+                        loadCampaigns(); // Reload campaigns
+                    } else {
+                        showAlert('danger', data.message || 'Failed to delete campaign');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting campaign:', error);
+                    showAlert('danger', 'Error deleting campaign');
+                });
+            }
         }
         
         // Initialize campaign calendar when switching to campaign tab
