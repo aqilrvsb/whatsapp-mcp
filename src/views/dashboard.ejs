@@ -1270,6 +1270,8 @@
                 </div>
             `;
             
+            let refreshInterval = null;
+            
             // Get QR code from WhatsApp login endpoint
             const pollForQR = () => {
                 fetch(`/app/login?deviceId=${deviceId}`, {
@@ -1296,6 +1298,43 @@
                                 </p>
                             </div>
                         `;
+                        
+                        // Socket connection for real-time updates
+                        const socket = io();
+                        
+                        socket.on('device-connected', (data) => {
+                            if (data.deviceId === deviceId) {
+                                qrContainer.innerHTML = `
+                                    <div class="text-center">
+                                        <i class="bi bi-check-circle-fill text-success" style="font-size: 48px;"></i>
+                                        <p class="mt-3 text-success">Device connected successfully!</p>
+                                    </div>
+                                `;
+                                setTimeout(() => {
+                                    modal.hide();
+                                    loadDevices(); // Reload devices
+                                }, 2000);
+                            }
+                        });
+                        
+                        socket.on('qr-timeout', (data) => {
+                            if (data.deviceId === deviceId) {
+                                qrContainer.innerHTML = `
+                                    <div class="text-center">
+                                        <i class="bi bi-clock-history text-warning" style="font-size: 48px;"></i>
+                                        <p class="mt-2 text-warning">QR code expired</p>
+                                        <button class="btn btn-primary" onclick="scanQR('${deviceId}')">Generate New QR</button>
+                                    </div>
+                                `;
+                            }
+                        });
+                        
+                        // Clean up socket when modal closes
+                        document.getElementById('qrModal').addEventListener('hidden.bs.modal', function cleanup() {
+                            socket.disconnect();
+                            if (refreshInterval) clearInterval(refreshInterval);
+                        }, { once: true });
+                        
                     } else if (data.code === 'PENDING') {
                         // Still waiting for QR, poll again
                         qrContainer.innerHTML = `
@@ -1333,47 +1372,6 @@
             
             // Start polling for QR
             pollForQR();
-                        
-                        // Set up auto-refresh every 20 seconds
-                        const refreshInterval = setInterval(() => {
-                            fetch(`/app/login?deviceId=${deviceId}`, {
-                                credentials: 'include'
-                            })
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.results && data.results.qr_link) {
-                                        qrContainer.querySelector('img').src = data.results.qr_link + '?t=' + Date.now();
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error refreshing QR code:', error);
-                                });
-                        }, 20000); // Refresh every 20 seconds
-                        
-                        // Clear interval when modal is closed
-                        document.getElementById('qrModal').addEventListener('hidden.bs.modal', function () {
-                            clearInterval(refreshInterval);
-                        }, { once: true });
-                    } else {
-                        qrContainer.innerHTML = `
-                            <div class="text-center">
-                                <i class="bi bi-exclamation-triangle text-warning" style="font-size: 48px;"></i>
-                                <p class="mt-2">Failed to load QR code</p>
-                                <button class="btn btn-sm btn-primary" onclick="scanQR('${deviceId}')">Retry</button>
-                            </div>
-                        `;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading QR code:', error);
-                    qrContainer.innerHTML = `
-                        <div class="text-center">
-                            <i class="bi bi-wifi-off text-danger" style="font-size: 48px;"></i>
-                            <p class="mt-2">Connection error</p>
-                            <button class="btn btn-sm btn-primary" onclick="scanQR('${deviceId}')">Retry</button>
-                        </div>
-                    `;
-                });
         }
 
         // Logout Device
@@ -2278,7 +2276,8 @@
             }
         });
     </script>
-</body>
-</html>    </script>
+    
+    <!-- Socket.io for real-time QR updates -->
+    <script src="/socket.io/socket.io.js"></script>
 </body>
 </html>
