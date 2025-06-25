@@ -9,7 +9,12 @@ async function requireAuth(req, res, next) {
         
         if (!sessionToken) {
             console.log('No session token found in cookies');
-            return res.status(401).json({ error: 'Unauthorized' });
+            // For API routes, return JSON error
+            if (req.path.startsWith('/api/')) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+            // For page routes, redirect to login
+            return res.redirect('/login');
         }
 
         // Get user repository
@@ -20,14 +25,20 @@ async function requireAuth(req, res, next) {
         const session = await userRepo.getSession(sessionToken);
         if (!session) {
             console.log('Invalid or expired session');
-            return res.status(401).json({ error: 'Unauthorized' });
+            if (req.path.startsWith('/api/')) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+            return res.redirect('/login');
         }
 
         // Get user details
         const user = await userRepo.getUserById(session.userId);
         if (!user) {
             console.log('User not found for session');
-            return res.status(401).json({ error: 'Unauthorized' });
+            if (req.path.startsWith('/api/')) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+            return res.redirect('/login');
         }
 
         // Attach user to request
@@ -37,7 +48,10 @@ async function requireAuth(req, res, next) {
         next();
     } catch (error) {
         console.error('Auth middleware error:', error);
-        return res.status(401).json({ error: 'Unauthorized' });
+        if (req.path.startsWith('/api/')) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        return res.redirect('/login');
     }
 }
 

@@ -90,9 +90,14 @@ io.on('connection', (socket) => {
 // Public routes (no auth required)
 app.use('/', authRoutes);
 
-// Protected routes (require authentication)
-app.get('/', requireAuth, (req, res) => {
-    res.redirect('/dashboard');
+// Root route - redirect to login or dashboard
+app.get('/', (req, res) => {
+    const sessionToken = req.cookies.session_token;
+    if (sessionToken) {
+        res.redirect('/dashboard');
+    } else {
+        res.redirect('/login');
+    }
 });
 
 app.get('/dashboard', requireAuth, (req, res) => {
