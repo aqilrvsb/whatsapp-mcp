@@ -1295,6 +1295,7 @@
             let pollInterval;
             
             // Emit connect-device event to start QR generation
+            console.log('Emitting connect-device for:', deviceId);
             socket.emit('connect-device', { deviceId });
             
             // Listen for QR code
@@ -1325,9 +1326,15 @@
                     pollInterval = setInterval(async () => {
                         if (!qrReceived) {
                             try {
-                                const response = await fetch(`/api/whatsapp/login?deviceId=${deviceId}`, {
+                                const response = await fetch(`/app/login?deviceId=${deviceId}`, {
                                     credentials: 'include'
                                 });
+                                
+                                if (!response.ok) {
+                                    console.error('QR endpoint returned:', response.status, response.statusText);
+                                    return;
+                                }
+                                
                                 const data = await response.json();
                                 
                                 console.log('Poll response:', data);
