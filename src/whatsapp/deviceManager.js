@@ -1,8 +1,9 @@
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const path = require('path');
 const fs = require('fs').promises;
+const QRCode = require('qrcode');
 const { getUserRepository } = require('../repository/userRepository');
 const { getDB } = require('../config/database');
 
@@ -11,32 +12,51 @@ class WhatsAppManager {
         this.io = io;
         this.clients = new Map(); // deviceId -> WhatsApp client
         this.sessions = new Map(); // deviceId -> session data
+        this.qrTimeouts = new Map(); // deviceId -> timeout
     }
 
     // Connect a device
     async connectDevice(deviceId, userId) {
         try {
+            console.log(`Starting connection for device ${deviceId}, user ${userId}`);
+            
             // Check if already connected
             if (this.clients.has(deviceId)) {
                 console.log(`Device ${deviceId} already connected`);
                 return;
             }
 
-            // Create session directory
-            const sessionPath = path.join(__dirname, '../../sessions', deviceId);
+            // Clear any existing QR timeout
+            if (this.qrTimeouts.has(deviceId)) {
+                clearTimeout(this.qrTimeouts.get(deviceId));
+                this.qrTimeouts.delete(deviceId);
+            }
+
+            // Create session directory - IMPORTANT: Use userId to isolate sessions
+            const sessionPath = path.join(__dirname, '../../sessions', userId, deviceId);
             await fs.mkdir(sessionPath, { recursive: true });
 
             // Initialize auth state
             const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
 
-            // Create WhatsApp socket
+            // Get latest version
+            const { version } = await fetchLatestBaileysVersion();
+            console.log(`Using WA version: ${version}`);
+
+            // Create WhatsApp socket with proper configuration
             const sock = makeWASocket({
+                version,
                 auth: state,
-                logger: pino({ level: 'warn' }),
+                logger: pino({ level: 'silent' }), // Reduce logging
                 printQRInTerminal: false,
-                browser: ['WhatsApp Analytics', 'Chrome', '110.0.0.0'],
-                // Important: Generate QR in string format
-                qrTimeout: 60000, // 60 seconds timeout
+                browser: ['Chrome (Linux)', '', ''], // More realistic browser
+                connectTimeoutMs: 60000,
+                qrTimeout: 120000, // 2 minutes
+                defaultQueryTimeoutMs: undefined,
+                keepAliveIntervalMs: 10000,
+                generateHighQualityLinkPreview: false,
+                syncFullHistory: false,
+                markOnlineOnConnect: true,
                 getMessage: async (key) => {
                     return { conversation: 'Hello' };
                 }
@@ -50,27 +70,81 @@ class WhatsAppManager {
                 const { connection, lastDisconnect, qr } = update;
 
                 if (qr) {
-                    // Send QR to frontend
-                    this.io.emit('qr', { deviceId, qr });
+                    console.log(`QR code received for device ${deviceId}`);
                     
-                    // Also store for API access
-                    this.sessions.set(deviceId, { qr, status: 'pending' });
+                    // Generate QR code as data URL
+                    try {
+                        const qrDataUrl = await QRCode.toDataURL(qr, {
+                            errorCorrectionLevel: 'M',
+                            type: 'image/png',
+                            quality: 0.92,
+                            margin: 1,
+                            color: {
+                                dark: '#000000',
+                                light: '#FFFFFF'
+                            },
+                            scale: 8
+                        });
+                        
+                        // Send QR to frontend with data URL
+                        this.io.emit('qr', { 
+                            deviceId, 
+                            qr: qrDataUrl,
+                            rawQr: qr // Also send raw QR for backup
+                        });
+                        
+                        // Store for API access
+                        this.sessions.set(deviceId, { 
+                            qr: qrDataUrl, 
+                            rawQr: qr,
+                            status: 'pending',
+                            timestamp: new Date()
+                        });
+
+                        // Set QR timeout
+                        const timeout = setTimeout(() => {
+                            console.log(`QR timeout for device ${deviceId}`);
+                            this.io.emit('qr-timeout', { deviceId });
+                            this.sessions.delete(deviceId);
+                            sock.end(new Error('QR timeout'));
+                        }, 120000); // 2 minutes
+
+                        this.qrTimeouts.set(deviceId, timeout);
+                    } catch (error) {
+                        console.error('Error generating QR code:', error);
+                    }
                 }
 
                 if (connection === 'close') {
                     const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+                    console.log(`Connection closed for device ${deviceId}, shouldReconnect: ${shouldReconnect}`);
+                    
+                    // Clear QR timeout
+                    if (this.qrTimeouts.has(deviceId)) {
+                        clearTimeout(this.qrTimeouts.get(deviceId));
+                        this.qrTimeouts.delete(deviceId);
+                    }
                     
                     if (shouldReconnect) {
                         console.log(`Reconnecting device ${deviceId}...`);
+                        this.clients.delete(deviceId);
                         setTimeout(() => this.connectDevice(deviceId, userId), 5000);
                     } else {
                         console.log(`Device ${deviceId} logged out`);
                         this.clients.delete(deviceId);
+                        this.sessions.delete(deviceId);
                         await this.updateDeviceStatus(deviceId, 'offline');
                     }
                 }
+
                 if (connection === 'open') {
-                    console.log(`Device ${deviceId} connected!`);
+                    console.log(`Device ${deviceId} connected successfully!`);
+                    
+                    // Clear QR timeout
+                    if (this.qrTimeouts.has(deviceId)) {
+                        clearTimeout(this.qrTimeouts.get(deviceId));
+                        this.qrTimeouts.delete(deviceId);
+                    }
                     
                     // Update device status and info
                     const jid = sock.user?.id;
@@ -78,34 +152,35 @@ class WhatsAppManager {
                     
                     await this.updateDeviceStatus(deviceId, 'online', phone, jid);
                     
+                    // Clear session
+                    this.sessions.delete(deviceId);
+                    
                     // Notify frontend
-                    this.io.emit('device-connected', { deviceId });
+                    this.io.emit('device-connected', { deviceId, phone, jid });
                 }
             });
 
             // Save credentials
             sock.ev.on('creds.update', saveCreds);
 
-            // Handle messages (for analytics)
+            // Handle messages for analytics
             sock.ev.on('messages.upsert', async (m) => {
-                // Handle incoming messages for analytics
-                // We don't store messages, just count them
                 const messages = m.messages;
                 for (const msg of messages) {
                     if (msg.key.fromMe) {
-                        // Message sent
                         await this.trackMessage(deviceId, userId, 'sent');
                     } else {
-                        // Message received
                         await this.trackMessage(deviceId, userId, 'received');
                     }
                 }
             });
 
-            // Socket events are handled globally in server.js
-
         } catch (error) {
             console.error(`Error connecting device ${deviceId}:`, error);
+            this.io.emit('connection-error', { 
+                deviceId, 
+                error: error.message || 'Connection failed' 
+            });
             throw error;
         }
     }
@@ -118,13 +193,29 @@ class WhatsAppManager {
                 await client.logout();
                 this.clients.delete(deviceId);
             }
+            
+            // Clear QR timeout
+            if (this.qrTimeouts.has(deviceId)) {
+                clearTimeout(this.qrTimeouts.get(deviceId));
+                this.qrTimeouts.delete(deviceId);
+            }
+            
+            // Clear session
+            this.sessions.delete(deviceId);
         } catch (error) {
             console.error(`Error disconnecting device ${deviceId}:`, error);
         }
     }
+
     // Get WhatsApp client for a device
     getClient(deviceId) {
         return this.clients.get(deviceId);
+    }
+
+    // Get QR code for a device
+    getQRCode(deviceId) {
+        const session = this.sessions.get(deviceId);
+        return session ? session.qr : null;
     }
 
     // Update device status in database
@@ -138,12 +229,11 @@ class WhatsAppManager {
         }
     }
 
-    // Track message for analytics (no storage)
+    // Track message for analytics
     async trackMessage(deviceId, userId, type) {
         try {
-            // This would update analytics counters
-            // Implementation depends on analytics requirements
             console.log(`Message ${type} for device ${deviceId}`);
+            // Update analytics in database if needed
         } catch (error) {
             console.error('Error tracking message:', error);
         }
@@ -157,10 +247,8 @@ class WhatsAppManager {
                 throw new Error('Device not connected');
             }
 
-            // Get chats from WhatsApp
             const chats = await client.groupFetchAllParticipating();
             
-            // Return formatted chats
             return Object.values(chats).map(chat => ({
                 id: chat.id,
                 name: chat.subject || chat.id.split('@')[0],
@@ -174,20 +262,61 @@ class WhatsAppManager {
     }
 
     // Send message
-    async sendMessage(deviceId, to, message) {
+    async sendMessage(deviceId, to, message, options = {}) {
         try {
             const client = this.clients.get(deviceId);
             if (!client) {
                 throw new Error('Device not connected');
             }
 
-            // Ensure JID format
             const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
             
             await client.sendMessage(jid, { text: message });
             return { success: true };
         } catch (error) {
             console.error('Error sending message:', error);
+            throw error;
+        }
+    }
+
+    // Send image
+    async sendImage(deviceId, to, imageUrl, caption = '') {
+        try {
+            const client = this.clients.get(deviceId);
+            if (!client) {
+                throw new Error('Device not connected');
+            }
+
+            const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+            
+            await client.sendMessage(jid, {
+                image: { url: imageUrl },
+                caption: caption
+            });
+            return { success: true };
+        } catch (error) {
+            console.error('Error sending image:', error);
+            throw error;
+        }
+    }
+
+    // Check if number is registered on WhatsApp
+    async checkNumber(deviceId, phoneNumber) {
+        try {
+            const client = this.clients.get(deviceId);
+            if (!client) {
+                throw new Error('Device not connected');
+            }
+
+            const jid = phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`;
+            const [result] = await client.onWhatsApp(jid);
+            
+            return {
+                exists: result?.exists || false,
+                jid: result?.jid || jid
+            };
+        } catch (error) {
+            console.error('Error checking number:', error);
             throw error;
         }
     }
