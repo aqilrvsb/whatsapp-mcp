@@ -34,7 +34,12 @@ class WhatsAppManager {
                 auth: state,
                 logger: pino({ level: 'warn' }),
                 printQRInTerminal: false,
-                browser: ['WhatsApp Analytics', 'Chrome', '110.0.0.0']
+                browser: ['WhatsApp Analytics', 'Chrome', '110.0.0.0'],
+                // Important: Generate QR in string format
+                qrTimeout: 60000, // 60 seconds timeout
+                getMessage: async (key) => {
+                    return { conversation: 'Hello' };
+                }
             });
 
             // Store client
@@ -47,6 +52,9 @@ class WhatsAppManager {
                 if (qr) {
                     // Send QR to frontend
                     this.io.emit('qr', { deviceId, qr });
+                    
+                    // Also store for API access
+                    this.sessions.set(deviceId, { qr, status: 'pending' });
                 }
 
                 if (connection === 'close') {

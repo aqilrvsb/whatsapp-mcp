@@ -2042,26 +2042,15 @@
         }
         
         function openCampaignModal(date) {
-            const existingCampaign = campaigns[date];
+            const existingCampaigns = campaigns[date] || [];
             const modal = new bootstrap.Modal(document.getElementById('campaignModal'));
             
-            // Set modal data
+            // Set modal data for new campaign
             document.getElementById('campaignDate').value = date;
-            document.getElementById('campaignModalTitle').textContent = existingCampaign 
-                ? `Edit Campaign - ${new Date(date).toLocaleDateString()}` 
-                : `Create Campaign - ${new Date(date).toLocaleDateString()}`;
-            
-            if (existingCampaign) {
-                document.getElementById('campaignId').value = existingCampaign.id;
-                document.getElementById('campaignTitle').value = existingCampaign.title;
-                document.getElementById('campaignMessage').value = existingCampaign.message;
-                document.getElementById('campaignImageUrl').value = existingCampaign.image_url || '';
-                document.getElementById('campaignTime').value = existingCampaign.scheduled_time || '';
-            } else {
-                document.getElementById('campaignForm').reset();
-                document.getElementById('campaignId').value = '';
-                document.getElementById('campaignDate').value = date;
-            }
+            document.getElementById('campaignModalTitle').textContent = `Create Campaign - ${new Date(date).toLocaleDateString()}`;
+            document.getElementById('campaignForm').reset();
+            document.getElementById('campaignId').value = '';
+            document.getElementById('campaignDate').value = date;
             
             modal.show();
         }
@@ -2195,7 +2184,10 @@
         function editCampaign(event, campaignId, dateStr) {
             event.stopPropagation(); // Prevent opening create modal
             
-            const campaign = campaigns[dateStr];
+            // Find the campaign in the campaigns array
+            const dayCampaigns = campaigns[dateStr] || [];
+            const campaign = dayCampaigns.find(c => c.id === campaignId);
+            
             if (campaign) {
                 document.getElementById('campaignId').value = campaign.id;
                 document.getElementById('campaignDate').value = dateStr;

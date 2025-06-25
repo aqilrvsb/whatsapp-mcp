@@ -1,32 +1,70 @@
 const express = require('express');
 const router = express.Router();
 const { getDB } = require('../config/database');
+const QRCode = require('qrcode');
 
 // Login with QR code
 router.get('/login', async (req, res) => {
     try {
         const { deviceId } = req.query;
         
-        // Generate a more realistic WhatsApp QR code format
-        // In production, this would come from the actual WhatsApp connection
-        const timestamp = Date.now();
-        const qrData = `2@${Buffer.from(`whatsapp_${deviceId}_${timestamp}`).toString('base64')},${timestamp},${deviceId}==`;
+        if (!deviceId) {
+            return res.status(400).json({
+                code: 'ERROR',
+                message: 'Device ID is required'
+            });
+        }
         
-        // Generate QR code using qr-server API
-        const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrData)}&color=128c7e`;
-        
-        res.json({
-            code: 'SUCCESS',
-            results: {
-                qr_link: qrLink,
-                qr_data: qrData
+        // Check if device is already being connected
+        if (global.whatsappManager) {
+            const session = global.whatsappManager.sessions.get(deviceId);
+            
+            if (session && session.qr) {
+                // Generate QR code image from the QR string
+                const qrImageUrl = await QRCode.toDataURL(session.qr);
+                
+                res.json({
+                    code: 'SUCCESS',
+                    results: {
+                        qr_link: qrImageUrl,
+                        qr_data: session.qr
+                    }
+                });
+            } else {
+                // Start connection to get QR
+                await global.whatsappManager.connectDevice(deviceId, req.user.id);
+                
+                // Wait a bit for QR to be generated
+                setTimeout(async () => {
+                    const newSession = global.whatsappManager.sessions.get(deviceId);
+                    if (newSession && newSession.qr) {
+                        const qrImageUrl = await QRCode.toDataURL(newSession.qr);
+                        res.json({
+                            code: 'SUCCESS',
+                            results: {
+                                qr_link: qrImageUrl,
+                                qr_data: newSession.qr
+                            }
+                        });
+                    } else {
+                        res.json({
+                            code: 'PENDING',
+                            message: 'Generating QR code, please wait...'
+                        });
+                    }
+                }, 2000);
             }
-        });
+        } else {
+            res.status(500).json({
+                code: 'ERROR',
+                message: 'WhatsApp manager not initialized'
+            });
+        }
     } catch (error) {
         console.error('Error generating QR code:', error);
         res.status(500).json({ 
             code: 'ERROR',
-            message: 'Failed to generate QR code' 
+            message: 'Failed to generate QR code: ' + error.message
         });
     }
 });
@@ -43,17 +81,11 @@ router.get('/login-with-code', async (req, res) => {
             });
         }
         
-        // Generate realistic WhatsApp pairing code format (XXXX-XXXX)
-        const part1 = Math.floor(Math.random() * 9000 + 1000).toString();
-        const part2 = Math.floor(Math.random() * 9000 + 1000).toString();
-        const pairCode = `${part1}-${part2}`;
-        
+        // For pairing code, we need to use a different method
+        // This is not yet implemented in Baileys
         res.json({
-            code: 'SUCCESS',
-            results: {
-                pair_code: pairCode,
-                expires_in: 60 // seconds
-            }
+            code: 'ERROR',
+            message: 'Phone pairing is not yet supported. Please use QR code instead.'
         });
     } catch (error) {
         console.error('Error generating pair code:', error);
@@ -69,11 +101,26 @@ router.get('/logout', async (req, res) => {
     try {
         const { deviceId } = req.query;
         
-        // For now, just return success
-        res.json({
-            code: 'SUCCESS',
-            message: 'Device logged out successfully'
-        });
+        if (!deviceId) {
+            return res.status(400).json({
+                code: 'ERROR',
+                message: 'Device ID is required'
+            });
+        }
+        
+        if (global.whatsappManager) {
+            await global.whatsappManager.disconnectDevice(deviceId);
+            
+            res.json({
+                code: 'SUCCESS',
+                message: 'Device logged out successfully'
+            });
+        } else {
+            res.status(500).json({
+                code: 'ERROR',
+                message: 'WhatsApp manager not initialized'
+            });
+        }
     } catch (error) {
         console.error('Error logging out device:', error);
         res.status(500).json({ 
@@ -95,7 +142,13 @@ router.post('/link-device', async (req, res) => {
             });
         }
         
-        // For now, just return success
+        // Update device phone in database
+        const db = getDB();
+        await db.none(
+            'UPDATE user_devices SET phone = $1 WHERE id = $2',
+            [phone, device_id]
+        );
+        
         res.json({
             status: 'success',
             message: 'Phone number linked successfully'
