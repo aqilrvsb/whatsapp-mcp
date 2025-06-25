@@ -20,39 +20,25 @@ router.get('/login', async (req, res) => {
             const session = global.whatsappManager.sessions.get(deviceId);
             
             if (session && session.qr) {
-                // Generate QR code image from the QR string
-                const qrImageUrl = await QRCode.toDataURL(session.qr);
-                
+                // Return existing QR immediately
                 res.json({
                     code: 'SUCCESS',
                     results: {
-                        qr_link: qrImageUrl,
-                        qr_data: session.qr
+                        qr_link: session.qr, // Already a data URL
+                        qr_data: session.rawQr
                     }
                 });
             } else {
-                // Start connection to get QR
-                await global.whatsappManager.connectDevice(deviceId, req.user.id);
+                // Start connection but return immediately
+                global.whatsappManager.connectDevice(deviceId, req.user.id)
+                    .catch(err => console.error('Background connection error:', err));
                 
-                // Wait a bit for QR to be generated
-                setTimeout(async () => {
-                    const newSession = global.whatsappManager.sessions.get(deviceId);
-                    if (newSession && newSession.qr) {
-                        const qrImageUrl = await QRCode.toDataURL(newSession.qr);
-                        res.json({
-                            code: 'SUCCESS',
-                            results: {
-                                qr_link: qrImageUrl,
-                                qr_data: newSession.qr
-                            }
-                        });
-                    } else {
-                        res.json({
-                            code: 'PENDING',
-                            message: 'Generating QR code, please wait...'
-                        });
-                    }
-                }, 2000);
+                // Return pending status immediately
+                res.json({
+                    code: 'PENDING',
+                    message: 'Connecting to WhatsApp... Please wait for QR code.',
+                    retry_after: 2000
+                });
             }
         } else {
             res.status(500).json({
