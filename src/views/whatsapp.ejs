@@ -3,210 +3,744 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= title %></title>
+    <title>WhatsApp Web - <%= device.deviceName %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        :root {
+            --whatsapp-green: #25d366;
+            --whatsapp-dark: #075e54;
+            --whatsapp-light: #dcf8c6;
+            --sidebar-bg: #f0f2f5;
+            --chat-bg: #e5ddd5;
+        }
+
         body {
             margin: 0;
+            padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f0f2f5;
+            height: 100vh;
+            overflow: hidden;
         }
-        
+
         .whatsapp-container {
             display: flex;
             height: 100vh;
-            background: white;
         }
-        
+
+        /* Sidebar */
         .sidebar {
-            width: 400px;
-            border-right: 1px solid #e9edef;
+            width: 30%;
+            min-width: 300px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid #d1d7db;
             display: flex;
             flex-direction: column;
         }
-        
+
         .sidebar-header {
-            background: #f0f2f5;
+            background: #ededed;
             padding: 10px 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            min-height: 59px;
+            height: 60px;
         }
-        
-        .search-box {
-            background: #f0f2f5;
-            padding: 7px 16px;
+
+        .profile-pic {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
         }
-        
-        .search-box input {
-            width: 100%;
-            padding: 7px 32px 7px 12px;
-            border: none;
-            border-radius: 8px;
+
+        .header-title {
+            flex: 1;
+            margin-left: 12px;
+            font-weight: 600;
+            color: #111b21;
+        }
+
+        .search-bar {
+            padding: 8px 12px;
             background: white;
-            font-size: 14px;
+            border-bottom: 1px solid #d1d7db;
         }
-        
+
+        .search-input {
+            width: 100%;
+            padding: 8px 32px 8px 65px;
+            border: none;
+            background: #f0f2f5;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        .search-wrapper {
+            position: relative;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #54656f;
+        }
+
         .chat-list {
             flex: 1;
             overflow-y: auto;
+            background: white;
         }
-        
+
         .chat-item {
             display: flex;
             padding: 12px 16px;
             cursor: pointer;
             border-bottom: 1px solid #f0f2f5;
+            transition: background 0.1s;
         }
+
         .chat-item:hover {
-            background: #f5f6f6;
+            background: #f0f2f5;
         }
-        
-        .main-content {
+
+        .chat-item.active {
+            background: #f0f2f5;
+        }
+
+        .chat-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #ddd;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 20px;
+        }
+
+        .chat-info {
             flex: 1;
             display: flex;
             flex-direction: column;
-            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==');
+            justify-content: center;
         }
-        
-        .main-header {
-            background: #f0f2f5;
+
+        .chat-name {
+            font-size: 16px;
+            color: #111b21;
+            margin-bottom: 2px;
+        }
+
+        .chat-message {
+            font-size: 14px;
+            color: #667781;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .chat-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            justify-content: center;
+        }
+
+        .chat-time {
+            font-size: 12px;
+            color: #667781;
+            margin-bottom: 4px;
+        }
+
+        .unread-count {
+            background: var(--whatsapp-green);
+            color: white;
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 12px;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        /* Main Chat Area */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--chat-bg);
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='pattern' x='0' y='0' width='100' height='100' patternUnits='userSpaceOnUse'%3E%3Crect x='0' y='0' width='100' height='100' fill='%23e5ddd5'/%3E%3Ccircle cx='50' cy='50' r='1' fill='%23d4cfc7' opacity='0.5'/%3E%3C/pattern%3E%3C/defs%3E%3Crect x='0' y='0' width='100%25' height='100%25' fill='url(%23pattern)'/%3E%3C/svg%3E");
+        }
+
+        .chat-header {
+            background: #ededed;
             padding: 10px 16px;
             display: flex;
             align-items: center;
-            min-height: 59px;
-            box-shadow: 0 1px 0 rgba(0,0,0,.08);
+            height: 60px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
-        
+
+        .chat-header-info {
+            flex: 1;
+            margin-left: 12px;
+        }
+
+        .chat-header-name {
+            font-size: 16px;
+            color: #111b21;
+        }
+
+        .chat-header-status {
+            font-size: 13px;
+            color: #667781;
+        }
+
         .messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px 40px;
+            padding: 20px 60px;
         }
-        
-        .status-bar {
-            background: #128c7e;
-            color: white;
-            padding: 8px 16px;
-            text-align: center;
+
+        .message {
+            display: flex;
+            margin-bottom: 12px;
+            align-items: flex-end;
+        }
+
+        .message.sent {
+            justify-content: flex-end;
+        }
+
+        .message-bubble {
+            max-width: 65%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+        }
+
+        .message.received .message-bubble {
+            background: white;
+            border-top-left-radius: 0;
+        }
+
+        .message.sent .message-bubble {
+            background: var(--whatsapp-light);
+            border-top-right-radius: 0;
+        }
+
+        .message-text {
             font-size: 14px;
+            color: #303030;
+            margin-bottom: 2px;
         }
-        
-        .status-bar.offline {
-            background: #dc3545;
+
+        .message-time {
+            font-size: 11px;
+            color: #667781;
+            text-align: right;
         }
-        
-        .empty-state {
+
+        /* Read-only notice */
+        .readonly-notice {
+            background: #f0f2f5;
+            padding: 10px 16px;
+            text-align: center;
+            color: #667781;
+            font-size: 14px;
+            border-top: 1px solid #d1d7db;
+        }
+
+        /* Loading State */
+        .loading-container {
             flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-direction: column;
+            color: #667781;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #f0f2f5;
+            border-top-color: var(--whatsapp-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-chat {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #667781;
+        }
+
+        .empty-icon {
+            font-size: 100px;
+            color: #d9dce0;
+            margin-bottom: 20px;
+        }
+
+        /* Device Info Bar */
+        .device-info-bar {
+            background: #00a884;
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .device-info-bar.offline {
+            background: #dc3545;
+        }
+
+        .device-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #70e064;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.offline {
+            background: #ff5555;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .btn-dashboard {
+            background: white;
+            color: #00a884;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .btn-dashboard:hover {
+            opacity: 0.9;
+            color: #00a884;
+        }
+
+        .error-message {
             text-align: center;
+            padding: 20px;
+            color: #dc3545;
+        }
+
+        /* Tabs */
+        .chat-tabs {
+            display: flex;
+            background: #ededed;
+            border-bottom: 1px solid #d1d7db;
+            padding: 0 16px;
+        }
+
+        .tab-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            color: #667781;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab-item.active {
+            color: var(--whatsapp-dark);
+            border-bottom-color: var(--whatsapp-green);
+        }
+
+        .tab-item:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        /* Contact List */
+        .contact-item {
+            display: flex;
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f2f5;
+            transition: background 0.1s;
+        }
+
+        .contact-item:hover {
+            background: #f0f2f5;
+        }
+
+        .contact-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #ddd;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 20px;
+        }
+
+        .contact-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .contact-name {
+            font-size: 16px;
+            color: #111b21;
+            margin-bottom: 2px;
+        }
+
+        .contact-phone {
+            font-size: 14px;
             color: #667781;
         }
     </style>
 </head>
 <body>
+    <div class="device-info-bar <%= device.status === 'offline' ? 'offline' : '' %>" id="deviceInfoBar">
+        <div class="device-info">
+            <div class="status-dot <%= device.status === 'offline' ? 'offline' : '' %>" id="statusDot"></div>
+            <span>Device: <strong id="deviceName"><%= device.deviceName %></strong></span>
+            <span>|</span>
+            <span>Phone: <strong id="devicePhone"><%= device.phone || 'Not connected' %></strong></span>
+        </div>
+        <a href="/dashboard" class="btn-dashboard">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+
     <div class="whatsapp-container">
-        <!-- Status Bar -->
-        <div class="status-bar <%= device.status === 'online' ? '' : 'offline' %>" style="position: absolute; width: 100%; z-index: 1000;">
-            <% if (device.status === 'online') { %>
-                <i class="bi bi-check-circle me-2"></i>Device Connected - Read Only Mode
-            <% } else { %>
-                <i class="bi bi-x-circle me-2"></i>Device Offline - Please connect first
-            <% } %>
-        </div>
         <!-- Sidebar -->
-        <div class="sidebar" style="margin-top: 40px;">
+        <div class="sidebar">
             <div class="sidebar-header">
-                <h6 class="mb-0">Chats</h6>
-                <a href="/dashboard" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> Back
-                </a>
+                <div class="profile-pic">
+                    <i class="bi bi-person-fill"></i>
+                </div>
+                <div class="header-title">WhatsApp Web (Read Only)</div>
             </div>
             
-            <div class="search-box">
-                <input type="text" placeholder="Search or start new chat" id="searchInput">
+            <!-- Tabs -->
+            <div class="chat-tabs">
+                <div class="tab-item active" id="chatsTab" onclick="switchTab('chats')">
+                    <i class="bi bi-chat-dots"></i> Chats
+                </div>
+                <div class="tab-item" id="contactsTab" onclick="switchTab('contacts')">
+                    <i class="bi bi-person-lines-fill"></i> Contacts
+                </div>
             </div>
             
+            <div class="search-bar">
+                <div class="search-wrapper">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" class="search-input" placeholder="Search..." id="searchInput">
+                </div>
+            </div>
+            
+            <!-- Chat List -->
             <div class="chat-list" id="chatList">
-                <% if (device.status === 'offline') { %>
-                    <div class="text-center text-muted p-4">
-                        <i class="bi bi-wifi-off" style="font-size: 48px;"></i>
-                        <p class="mt-2">Device is offline</p>
-                    </div>
-                <% } else { %>
-                    <div class="text-center text-muted p-4">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Loading chats...</p>
-                    </div>
-                <% } %>
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <p>Loading chats...</p>
+                </div>
+            </div>
+            
+            <!-- Contact List (hidden by default) -->
+            <div class="chat-list" id="contactList" style="display: none;">
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <p>Loading contacts...</p>
+                </div>
             </div>
         </div>
-        
-        <!-- Main Content -->
-        <div class="main-content" style="margin-top: 40px;">
-            <div class="empty-state">
-                <div>
-                    <i class="bi bi-chat-text" style="font-size: 64px;"></i>
-                    <h5 class="mt-3">WhatsApp Web - Read Only</h5>
-                    <p>Select a chat to view messages</p>
+
+        <!-- Chat Area -->
+        <div class="chat-area">
+            <div class="empty-chat" id="emptyState">
+                <i class="bi bi-whatsapp empty-icon"></i>
+                <h4>WhatsApp Web</h4>
+                <p>Select a chat to view messages</p>
+                <small class="text-muted">This is a read-only view</small>
+            </div>
+            
+            <div id="chatView" style="display: none;">
+                <div class="chat-header" id="chatHeader">
+                    <div class="chat-avatar">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                    <div class="chat-header-info">
+                        <div class="chat-header-name" id="chatName">Select a chat</div>
+                        <div class="chat-header-status" id="chatStatus">Click on a chat to start</div>
+                    </div>
+                </div>
+                
+                <div class="messages-container" id="messagesContainer">
+                    <!-- Messages will be loaded here -->
+                </div>
+                
+                <div class="readonly-notice">
+                    <i class="bi bi-info-circle"></i> This is a read-only view. You cannot send messages from here.
                 </div>
             </div>
         </div>
     </div>
-    
+
     <script>
         const deviceId = '<%= device.id %>';
-        const isOnline = <%= device.status === 'online' %>;
+        let currentView = 'chats';
+        let chats = [];
+        let contacts = [];
+        let selectedChat = null;
         
-        // Load chats if device is online
-        if (isOnline) {
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
             loadChats();
+            loadContacts();
+            
+            // Search functionality
+            document.getElementById('searchInput').addEventListener('input', handleSearch);
+        });
+        
+        // Switch between tabs
+        function switchTab(tab) {
+            currentView = tab;
+            
+            // Update tab UI
+            document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+            document.getElementById(tab + 'Tab').classList.add('active');
+            
+            // Update search placeholder
+            document.getElementById('searchInput').placeholder = tab === 'chats' ? 'Search chats...' : 'Search contacts...';
+            
+            // Show/hide lists
+            if (tab === 'chats') {
+                document.getElementById('chatList').style.display = 'block';
+                document.getElementById('contactList').style.display = 'none';
+            } else {
+                document.getElementById('chatList').style.display = 'none';
+                document.getElementById('contactList').style.display = 'block';
+            }
+            
+            // Clear search
+            document.getElementById('searchInput').value = '';
+            handleSearch();
         }
         
-        async function loadChats() {
-            try {
-                const response = await fetch(`/api/messages/${deviceId}/chats`);
-                if (response.ok) {
-                    const chats = await response.json();
+        // Load chats using Baileys API
+        function loadChats() {
+            fetch(`/api/whatsapp/chats?deviceId=${deviceId}`, {
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.code === 'SUCCESS') {
+                    chats = data.results || [];
                     renderChats(chats);
                 } else {
-                    showError('Failed to load chats');
+                    showError('chatList', data.message || 'Failed to load chats');
                 }
-            } catch (error) {
+            })
+            .catch(error => {
                 console.error('Error loading chats:', error);
-                showError('Error loading chats');
+                showError('chatList', 'Failed to load chats: ' + error.message);
+            });
+        }
+        
+        // Load contacts using Baileys API
+        function loadContacts() {
+            fetch(`/api/whatsapp/contacts?deviceId=${deviceId}`, {
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.code === 'SUCCESS') {
+                    contacts = data.results || [];
+                    renderContacts(contacts);
+                } else {
+                    showError('contactList', data.message || 'Failed to load contacts');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading contacts:', error);
+                showError('contactList', 'Failed to load contacts: ' + error.message);
+            });
+        }
+        
+        // Render chats
+        function renderChats(chatList) {
+            const container = document.getElementById('chatList');
+            
+            if (chatList.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted p-4">No chats found</div>';
+                return;
             }
-        }                    <h6 class="mb-0">${chatName}</h6>
-                </div>
-                <div class="messages-container">
-                    <div class="text-center text-muted">
-                        <p>Message viewing coming soon!</p>
+            
+            container.innerHTML = chatList.map(chat => `
+                <div class="chat-item" onclick="selectChat('${chat.id}', '${escapeHtml(chat.name)}')">
+                    <div class="chat-avatar">
+                        ${chat.isGroup ? '<i class="bi bi-people-fill"></i>' : '<i class="bi bi-person-fill"></i>'}
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">${escapeHtml(chat.name)}</div>
+                        <div class="chat-message">${chat.isGroup ? `${chat.participants} participants` : 'Personal chat'}</div>
+                    </div>
+                    <div class="chat-meta">
+                        <div class="chat-time">${formatTime(chat.timestamp)}</div>
                     </div>
                 </div>
-                <div class="p-3 bg-light text-center">
-                    <small class="text-muted">
-                        <i class="bi bi-lock me-2"></i>Read-only mode - You cannot send messages
-                    </small>
+            `).join('');
+        }
+        
+        // Render contacts
+        function renderContacts(contactList) {
+            const container = document.getElementById('contactList');
+            
+            if (contactList.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted p-4">No contacts found</div>';
+                return;
+            }
+            
+            container.innerHTML = contactList.map(contact => `
+                <div class="contact-item" onclick="startChatWithContact('${contact.phone}', '${escapeHtml(contact.name)}')">
+                    <div class="contact-avatar">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                    <div class="contact-info">
+                        <div class="contact-name">${escapeHtml(contact.name)}</div>
+                        <div class="contact-phone">${formatPhone(contact.phone)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Select a chat
+        function selectChat(chatId, chatName) {
+            selectedChat = chatId;
+            
+            // Update UI
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('chatView').style.display = 'flex';
+            document.getElementById('chatName').textContent = chatName;
+            document.getElementById('chatStatus').textContent = 'Loading messages...';
+            
+            // Update active state
+            document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            // Load messages (mock for now since Baileys doesn't provide message history easily)
+            loadMessages(chatId);
+        }
+        
+        // Start chat with contact
+        function startChatWithContact(phone, name) {
+            alert(`Starting chat with ${name} (${phone})\nNote: This is read-only view.`);
+        }
+        
+        // Load messages (mock implementation)
+        function loadMessages(chatId) {
+            // Since Baileys doesn't provide easy message history access,
+            // we'll show a placeholder message
+            const container = document.getElementById('messagesContainer');
+            container.innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <i class="bi bi-info-circle"></i>
+                    <p>Message history is not available in this view.</p>
+                    <small>Use the device actions to send new messages.</small>
+                </div>
+            `;
+            
+            document.getElementById('chatStatus').textContent = 'Read-only mode';
+        }
+        
+        // Search functionality
+        function handleSearch() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            
+            if (currentView === 'chats') {
+                const filtered = chats.filter(chat => 
+                    chat.name.toLowerCase().includes(query)
+                );
+                renderChats(filtered);
+            } else {
+                const filtered = contacts.filter(contact => 
+                    contact.name.toLowerCase().includes(query) ||
+                    contact.phone.includes(query)
+                );
+                renderContacts(filtered);
+            }
+        }
+        
+        // Show error
+        function showError(containerId, message) {
+            document.getElementById(containerId).innerHTML = `
+                <div class="error-message">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <p>${message}</p>
                 </div>
             `;
         }
         
-        // Search functionality
-        document.getElementById('searchInput')?.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
-            const chatItems = document.querySelectorAll('.chat-item');
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
             
-            chatItems.forEach(item => {
-                const chatName = item.querySelector('h6').textContent.toLowerCase();
-                item.style.display = chatName.includes(searchTerm) ? 'flex' : 'none';
-            });
-        });
+            if (diff < 86400000) { // Less than 24 hours
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            } else {
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+        }
+        
+        function formatPhone(phone) {
+            // Format phone number for display
+            if (phone.startsWith('60')) {
+                return '+' + phone;
+            }
+            return phone;
+        }
     </script>
 </body>
 </html>
