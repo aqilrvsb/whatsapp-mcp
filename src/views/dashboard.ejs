@@ -343,7 +343,8 @@
         </ul>
 
         <!-- Tab Content -->
-        <div class="tab-content" id="mainTabContent">            <!-- Dashboard Tab -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- Dashboard Tab -->
             <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
                 <!-- Time Range Toggle -->
                 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -380,6 +381,7 @@
                         </div>
                     </div>
                 </div>
+
                 <!-- Custom Date Range (Hidden by default) -->
                 <div id="customDateRange" class="card mb-3 d-none">
                     <div class="card-body">
@@ -415,7 +417,8 @@
                             <div class="metric-value" id="activeDevices">0</div>
                             <div class="metric-label">Active Devices</div>
                         </div>
-                    </div>                    <div class="col-md-3">
+                    </div>
+                    <div class="col-md-3">
                         <div class="metric-card">
                             <div class="metric-icon bg-danger bg-opacity-10 text-danger">
                                 <i class="bi bi-phone-x"></i>
@@ -573,7 +576,8 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="campaignForm">                        <input type="hidden" id="campaignId">
+                    <form id="campaignForm">
+                        <input type="hidden" id="campaignId">
                         <input type="hidden" id="campaignDate">
                         
                         <div class="mb-3">
@@ -623,7 +627,8 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>        // Global variables
+    <script>
+        // Global variables
         let messageChart;
         let currentTimeRange = 7;
         let devices = [];
@@ -658,6 +663,7 @@
             // Set the toggle to match the current state
             document.getElementById('autoRefreshToggle').checked = isAutoRefreshEnabled;
         });
+
         // Initialize Chart
         function initializeChart() {
             const ctx = document.getElementById('messageChart').getContext('2d');
@@ -721,11 +727,15 @@
                 }
             });
         }
+
         // Load Dashboard Data
         function loadDashboardData(days, silent = false) {
             if (!silent) {
                 showLoading();
             }
+            
+            // Get user email
+            const userEmail = localStorage.getItem('userEmail') || '<%= user.username %>@whatsapp.com';
             
             // Build URL with device filter
             let url = `/api/analytics/${days}`;
@@ -735,7 +745,10 @@
             
             // Fetch real data from API
             fetch(url, {
-                credentials: 'include'
+                credentials: 'include',
+                headers: {
+                    'X-User-Email': userEmail
+                }
             })
                 .then(response => response.json())
                 .then(data => {
@@ -758,6 +771,7 @@
                     }
                 });
         }
+
         // Generate Mock Data
         function generateMockData(days) {
             const leadsSent = Math.floor(Math.random() * 1000) + 500;
@@ -795,190 +809,8 @@
             }
 
             return { metrics, daily };
-        }        // Global variables
-        let messageChart;
-        let currentTimeRange = 7;
-        let devices = [];
-        let currentDeviceFilter = 'all';
-        let refreshInterval;
-        let isAutoRefreshEnabled = false;  // Default to disabled
-        let currentMonth = new Date().getMonth();
-        let currentYear = new Date().getFullYear();
-        let campaigns = {};
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Dashboard v1.1.0 FINAL - All fixes applied');
-            console.log('Includes: Device filter fix, auth cookies, proper function definitions');
-            initializeChart();
-            loadDashboardData(7);
-            loadDevices();
-            
-            // Set max date to today for date inputs
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('startDate').max = today;
-            document.getElementById('endDate').max = today;
-            document.getElementById('endDate').value = today;
-            
-            // Set start date to 7 days ago
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            document.getElementById('startDate').value = sevenDaysAgo.toISOString().split('T')[0];
-            
-            // Start auto-refresh only if enabled
-            if (isAutoRefreshEnabled) {
-                startAutoRefresh();
-            }
-            
-            // Set the toggle to match the current state
-            document.getElementById('autoRefreshToggle').checked = isAutoRefreshEnabled;
-            
-            // Initialize campaign calendar when switching to campaign tab
-            const campaignTab = document.getElementById('campaign-tab');
-            if (campaignTab) {
-                campaignTab.addEventListener('shown.bs.tab', function() {
-                    initializeCampaignCalendar();
-                });
-            }
-        });
-        // Initialize Chart
-        function initializeChart() {
-            const ctx = document.getElementById('messageChart').getContext('2d');
-            messageChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Leads Sent',
-                        data: [],
-                        borderColor: '#128c7e',
-                        backgroundColor: 'rgba(18, 140, 126, 0.1)',
-                        tension: 0.4
-                    }, {
-                        label: 'Leads Received',
-                        data: [],
-                        borderColor: '#25d366',
-                        backgroundColor: 'rgba(37, 211, 102, 0.1)',
-                        tension: 0.4
-                    }, {
-                        label: 'Leads Read',
-                        data: [],
-                        borderColor: '#34b7f1',
-                        backgroundColor: 'rgba(52, 183, 241, 0.1)',
-                        tension: 0.4
-                    }, {
-                        label: 'Leads Replied',
-                        data: [],
-                        borderColor: '#00a884',
-                        backgroundColor: 'rgba(0, 168, 132, 0.1)',
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                        },
-                        title: {
-                            display: true,
-                            text: 'Lead Activity Trends'
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Number of Leads'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Date'
-                            }
-                        }
-                    }
-                }
-            });
         }
-        // Load Dashboard Data
-        function loadDashboardData(days, silent = false) {
-            if (!silent) {
-                showLoading();
-            }
-            
-            // Build URL with device filter
-            let url = `/api/analytics/${days}`;
-            if (currentDeviceFilter && currentDeviceFilter !== 'all') {
-                url += `?device=${currentDeviceFilter}`;
-            }
-            
-            // Fetch real data from API
-            fetch(url, {
-                credentials: 'include'
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.code === 'SUCCESS') {
-                        updateMetrics(data.results.metrics);
-                        updateChart(data.results.daily);
-                    }
-                    if (!silent) {
-                        hideLoading();
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading analytics:', error);
-                    // Fallback to mock data
-                    const mockData = generateMockData(days);
-                    updateMetrics(mockData.metrics);
-                    updateChart(mockData.daily);
-                    if (!silent) {
-                        hideLoading();
-                    }
-                });
-        }
-        // Generate Mock Data
-        function generateMockData(days) {
-            const leadsSent = Math.floor(Math.random() * 1000) + 500;
-            const leadsReceived = Math.floor(leadsSent * 0.8);
-            const leadsNotReceived = leadsSent - leadsReceived;
-            const leadsRead = Math.floor(leadsReceived * 0.7);
-            const leadsNotRead = leadsReceived - leadsRead;
-            const leadsReplied = Math.floor(leadsRead * 0.5);
-            
-            const metrics = {
-                activeDevices: devices.filter(d => d.status === 'online').length,
-                inactiveDevices: devices.filter(d => d.status === 'offline').length,
-                leadsSent: leadsSent,
-                leadsReceived: leadsReceived,
-                leadsNotReceived: leadsNotReceived,
-                leadsRead: leadsRead,
-                leadsNotRead: leadsNotRead,
-                leadsReplied: leadsReplied
-            };
 
-            const daily = [];
-            const today = new Date();
-            
-            for (let i = days - 1; i >= 0; i--) {
-                const date = new Date(today);
-                date.setDate(today.getDate() - i);
-                
-                daily.push({
-                    date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                    sent: Math.floor(Math.random() * 100) + 20,
-                    received: Math.floor(Math.random() * 80) + 15,
-                    read: Math.floor(Math.random() * 60) + 10,
-                    replied: Math.floor(Math.random() * 30) + 5
-                });
-            }
-
-            return { metrics, daily };
-        }
         // Update Metrics
         function updateMetrics(metrics) {
             // Device metrics - Calculate from loaded devices
@@ -1046,6 +878,7 @@
                 loadDashboardData(days);
             }
         }
+
         // Show Custom Date Range
         function showCustomDateRange() {
             document.getElementById('customDateRange').classList.remove('d-none');
@@ -1097,11 +930,15 @@
             // Update display
             document.getElementById('customDateRange').classList.add('d-none');
         }
+
         // Load Dashboard Data with Custom Range
         function loadDashboardDataCustomRange(startDate, endDate, days, silent = false) {
             if (!silent) {
                 showLoading();
             }
+            
+            // Get user email
+            const userEmail = localStorage.getItem('userEmail') || '<%= user.username %>@whatsapp.com';
             
             // Build URL with device filter
             let url = `/api/analytics/custom?start=${startDate}&end=${endDate}`;
@@ -1111,7 +948,10 @@
             
             // Fetch real data from API
             fetch(url, {
-                credentials: 'include'
+                credentials: 'include',
+                headers: {
+                    'X-User-Email': userEmail
+                }
             })
                 .then(response => response.json())
                 .then(data => {
@@ -1134,6 +974,7 @@
                     }
                 });
         }
+
         // Generate Mock Data for Date Range
         function generateMockDataForRange(startDate, endDate, days) {
             const metrics = {
@@ -1188,6 +1029,7 @@
                     renderDevices();
                 });
         }
+
         // Render Devices
         function renderDevices() {
             const devicesGrid = document.getElementById('devicesGrid');
@@ -1214,6 +1056,7 @@
             // Update device filter dropdown
             updateDeviceFilter();
         }
+
         // Create Device Card
         function createDeviceCard(device) {
             const isConnected = device.status === 'online';
@@ -1257,6 +1100,7 @@
                                 </ul>
                             </div>
                         </div>
+
                         <!-- Phone Number Section -->
                         <div class="device-info mb-3 p-3 bg-light rounded">
                             <div class="d-flex justify-content-between align-items-center">
@@ -1286,7 +1130,8 @@
                         </div>
                         
                         <!-- Action Buttons -->
-                        <div class="d-grid gap-2">                            ${!isConnected ? `
+                        <div class="d-grid gap-2">
+                            ${!isConnected ? `
                                 <div class="btn-group" role="group">
                                     <button class="btn btn-primary" onclick="scanQR('${device.id}')">
                                         <i class="bi bi-qr-code me-2"></i>QR Code
@@ -1329,6 +1174,7 @@
                 </div>
             `;
         }
+
         // Add New Device
         function addNewDevice() {
             const deviceName = prompt('Enter device name:');
@@ -1373,6 +1219,7 @@
                 // The device card now shows both options
             }
         }
+
         // Scan QR Code
         function scanQR(deviceId) {
             const modal = new bootstrap.Modal(document.getElementById('qrModal'));
@@ -1411,7 +1258,8 @@
                                     <small><strong>Note:</strong> If QR code doesn't work, close this modal and try the <strong>Phone Code</strong> option instead.</small>
                                 </div>
                             </div>
-                        `;                        
+                        `;
+                        
                         // Set up auto-refresh every 20 seconds
                         const refreshInterval = setInterval(() => {
                             fetch(`/app/login?deviceId=${deviceId}`, {
@@ -1437,7 +1285,7 @@
                             <div class="text-center">
                                 <i class="bi bi-exclamation-triangle text-warning" style="font-size: 48px;"></i>
                                 <p class="mt-2">Failed to load QR code</p>
-                                <button class="btn btn-sm btn-primary" onclick="scanQR('${deviceId}')">Retry</button>
+                                <button class="btn btn-sm btn-primary" onclick="scanQR(${deviceId})">Retry</button>
                             </div>
                         `;
                     }
@@ -1448,11 +1296,12 @@
                         <div class="text-center">
                             <i class="bi bi-wifi-off text-danger" style="font-size: 48px;"></i>
                             <p class="mt-2">Connection error</p>
-                            <button class="btn btn-sm btn-primary" onclick="scanQR('${deviceId}')">Retry</button>
+                            <button class="btn btn-sm btn-primary" onclick="scanQR(${deviceId})">Retry</button>
                         </div>
                     `;
                 });
         }
+
         // Logout Device
         function logoutDevice(deviceId) {
             if (confirm('Are you sure you want to logout this device from WhatsApp?')) {
@@ -1490,6 +1339,7 @@
                 });
             }
         }
+
         // Delete Device
         function deleteDevice(deviceId) {
             if (confirm('Are you sure you want to delete this device?')) {
@@ -1552,6 +1402,7 @@
                 });
             }
         }
+
         // Use Phone Code (for linking without QR)
         function usePhoneCode(deviceId) {
             // Malaysian phone format helper
@@ -1597,7 +1448,8 @@
                 }
                 
                 const loadingModalEl = new bootstrap.Modal(document.getElementById('phoneCodeLoadingModal'));
-                loadingModalEl.show();                
+                loadingModalEl.show();
+                
                 fetch(`/app/login-with-code?phone=${encodeURIComponent(formattedPhone)}`, {
                     credentials: 'include'
                 })
@@ -1648,7 +1500,8 @@
                                     </div>
                                 </div>
                             </div>
-                        `;                        
+                        `;
+                        
                         // Add modal to body if not exists
                         if (!document.getElementById('pairCodeModal')) {
                             document.body.insertAdjacentHTML('beforeend', successModal);
@@ -1667,6 +1520,7 @@
                 });
             }
         }
+
         // View Device Statistics
         function viewDeviceStats(deviceId) {
             // Switch to dashboard tab and filter by this device
@@ -1693,28 +1547,6 @@
             }
         }
 
-        // Device Actions - Testing Page
-        function deviceActions(deviceId) {
-            const device = devices.find(d => d.id === deviceId);
-            if (device) {
-                window.location.href = `/device/${deviceId}/actions`;
-            }
-        }
-        
-        // Device Leads - Lead Management
-        function deviceLeads(deviceId) {
-            const device = devices.find(d => d.id === deviceId);
-            if (device) {
-                window.location.href = `/device/${deviceId}/leads`;
-            }
-        }
-        
-        // Open WhatsApp Web for device
-        function openWhatsAppWeb(deviceId) {
-            // Open WhatsApp Web in a new tab
-            // This would open a dedicated WhatsApp Web instance for this device
-            window.open(`/device/${deviceId}/whatsapp-web`, '_blank');
-        }
         // Logout
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
@@ -1730,21 +1562,73 @@
         function hideLoading() {
             document.getElementById('loading').style.display = 'none';
         }
-        
-        // Show Alert
-        function showAlert(type, message) {
-            const alert = document.createElement('div');
-            alert.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
-            alert.style.zIndex = '9999';
-            alert.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            document.body.appendChild(alert);
+
+        // WebSocket Connection for Real-time Updates
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
             
-            setTimeout(() => alert.remove(), 5000);
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // Handle different message types
+                    switch(data.code) {
+                        case 'LOGIN_SUCCESS':
+                            // Device paired successfully (but not fully connected yet)
+                            console.log('Device paired:', data.message);
+                            // Don't close modal yet, wait for full connection
+                            break;
+                        case 'DEVICE_CONNECTED':
+                            // Device fully connected and logged in
+                            console.log('Device fully connected:', data.message);
+                            // Close QR modal if open
+                            const qrModal = bootstrap.Modal.getInstance(document.getElementById('qrModal'));
+                            if (qrModal) {
+                                qrModal.hide();
+                            }
+                            // Show success message
+                            alert('WhatsApp connected successfully!');
+                            // Reload devices to show updated status
+                            loadDevices();
+                            break;
+                        case 'DEVICE_STATUS':
+                            updateDeviceStatus(data.deviceId, data.status);
+                            break;
+                        case 'NEW_MESSAGE':
+                            // Update metrics in real-time
+                            if (currentTimeRange === 1 || currentTimeRange === 7) {
+                                loadDashboardData(currentTimeRange);
+                            }
+                            break;
+                    }
+                } catch (error) {
+                    console.error('WebSocket message error:', error);
+                }
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = function() {
+                // Reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            };
         }
 
+        // Update Device Status
+        function updateDeviceStatus(deviceId, status) {
+            const device = devices.find(d => d.id === deviceId);
+            if (device) {
+                device.status = status;
+                device.lastSeen = status === 'online' ? 'Active now' : 'Just now';
+                renderDevices();
+            }
+        }
+
+        // Initialize WebSocket on load
+        connectWebSocket();
         // Filter by Device
         function filterByDevice() {
             currentDeviceFilter = document.getElementById('deviceFilter').value;
@@ -1776,7 +1660,8 @@
             
             // Restore selected value
             deviceFilter.value = currentDeviceFilter;
-        }        
+        }
+        
         // Auto-refresh functions
         function startAutoRefresh() {
             if (isAutoRefreshEnabled) {
@@ -1841,7 +1726,115 @@
                 refreshDashboard(); // Refresh immediately when page becomes visible
             }
         });
+        
+        // Device Actions - Testing Page
+        }
+
+        // Update Device Filter Dropdown
+        function updateDeviceFilter() {
+            const deviceFilter = document.getElementById('deviceFilter');
+            
+            // Clear existing options (except "All Devices")
+            deviceFilter.innerHTML = '<option value="all">All Devices</option>';
+            
+            // Add device options
+            devices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.id;
+                option.textContent = `${device.name} (${device.phone})`;
+                deviceFilter.appendChild(option);
+            });
+            
+            // Restore selected value
+            deviceFilter.value = currentDeviceFilter;
+        }
+        
+        // Auto-refresh functions
+        function startAutoRefresh() {
+            if (isAutoRefreshEnabled) {
+                // Refresh every 10 seconds
+                refreshInterval = setInterval(() => {
+                    refreshDashboard();
+                }, 10000);
+            }
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+
+        function toggleAutoRefresh() {
+            isAutoRefreshEnabled = document.getElementById('autoRefreshToggle').checked;
+            
+            if (isAutoRefreshEnabled) {
+                startAutoRefresh();
+                console.log('Auto-refresh enabled');
+            } else {
+                stopAutoRefresh();
+                console.log('Auto-refresh disabled');
+            }
+        }
+
+        function refreshDashboard() {
+            // Don't show loading spinner for auto-refresh to avoid UI flicker
+            const isManualRefresh = !refreshInterval;
+            
+            if (isManualRefresh) {
+                showLoading();
+            }
+            
+            // Reload current data
+            if (currentTimeRange === 'custom') {
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                loadDashboardDataCustomRange(startDate, endDate, null, !isManualRefresh);
+            } else {
+                loadDashboardData(currentTimeRange, !isManualRefresh);
+            }
+            
+            // Reload devices
+            loadDevices(!isManualRefresh);
+            
+            // Update last refresh time
+            const now = new Date();
+            document.getElementById('lastRefresh').textContent = 
+                `Last refresh: ${now.toLocaleTimeString()}`;
+        }
+        
+        // Stop auto-refresh when page is hidden
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else if (isAutoRefreshEnabled) {
+                startAutoRefresh();
+                refreshDashboard(); // Refresh immediately when page becomes visible
+            }
+        });
+        
+        // Device Actions - Testing Page
+        function deviceActions(deviceId) {
+            const device = devices.find(d => d.id === deviceId);
+            if (device) {
+                window.location.href = `/device/${deviceId}/actions`;
+            }
+        }
+        
+        // Device Leads - Lead Management
+        function deviceLeads(deviceId) {
+            const device = devices.find(d => d.id === deviceId);
+            if (device) {
+                window.location.href = `/device/${deviceId}/leads`;
+            }
+        }
+        
         // Campaign Calendar Functions
+        let currentMonth = new Date().getMonth();
+        let currentYear = new Date().getFullYear();
+        let campaigns = {};
+        
         function initializeCampaignCalendar() {
             const calendarContainer = document.getElementById('campaignCalendar');
             if (!calendarContainer) return;
@@ -1879,7 +1872,8 @@
                         <i class="bi bi-chevron-right"></i>
                     </button>
                 </div>
-            `;            
+            `;
+            
             // Add day headers
             const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
             dayHeaders.forEach(day => {
@@ -1927,7 +1921,8 @@
                 `;
                 dayElement.onclick = () => openCampaignModal(dateStr);
                 calendar.appendChild(dayElement);
-            }            
+            }
+            
             // Add next month's leading days
             const totalCells = calendar.children.length - 7; // Minus headers
             const remainingCells = 35 - totalCells; // 5 rows x 7 days
@@ -1971,7 +1966,8 @@
                     }
                 })
                 .catch(error => console.error('Error loading campaigns:', error));
-        }        
+        }
+        
         function openCampaignModal(date) {
             const existingCampaign = campaigns[date];
             const modal = new bootstrap.Modal(document.getElementById('campaignModal'));
@@ -1985,7 +1981,6 @@
             if (existingCampaign) {
                 document.getElementById('campaignId').value = existingCampaign.id;
                 document.getElementById('campaignTitle').value = existingCampaign.title;
-                document.getElementById('campaignNiche').value = existingCampaign.niche || '';
                 document.getElementById('campaignMessage').value = existingCampaign.message;
                 document.getElementById('campaignImageUrl').value = existingCampaign.image_url || '';
                 document.getElementById('campaignTime').value = existingCampaign.scheduled_time || '';
@@ -2039,7 +2034,8 @@
                 }
             })
             .catch(error => showAlert('danger', 'Error: ' + error.message));
-        }        
+        }
+        
         // Image compression function with 350KB limit
         function compressImage(input) {
             const file = input.files[0];
@@ -2101,6 +2097,36 @@
             };
             reader.readAsDataURL(file);
         }
+        
+        function showAlert(type, message) {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3`;
+            alert.style.zIndex = '9999';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            setTimeout(() => alert.remove(), 5000);
+        }
+        
+        // Open WhatsApp Web for device
+        function openWhatsAppWeb(deviceId) {
+            // Open WhatsApp Web in a new tab
+            // This would open a dedicated WhatsApp Web instance for this device
+            window.open(`/device/${deviceId}/whatsapp-web`, '_blank');
+        }
+        
+        // Initialize campaign calendar when switching to campaign tab
+        document.addEventListener('DOMContentLoaded', function() {
+            const campaignTab = document.getElementById('campaign-tab');
+            if (campaignTab) {
+                campaignTab.addEventListener('shown.bs.tab', function() {
+                    initializeCampaignCalendar();
+                });
+            }
+        });
     </script>
 </body>
 </html>
