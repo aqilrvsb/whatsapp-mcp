@@ -687,20 +687,51 @@
             alert(`Starting chat with ${name} (${phone})\nNote: This is read-only view.`);
         }
         
-        // Load messages (mock implementation)
+        // Load messages for a chat
         function loadMessages(chatId) {
-            // Since Baileys doesn't provide easy message history access,
-            // we'll show a placeholder message
             const container = document.getElementById('messagesContainer');
-            container.innerHTML = `
-                <div class="text-center text-muted p-4">
-                    <i class="bi bi-info-circle"></i>
-                    <p>Message history is not available in this view.</p>
-                    <small>Use the device actions to send new messages.</small>
-                </div>
-            `;
+            container.innerHTML = '<div class="text-center p-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading messages...</span></div></div>';
             
-            document.getElementById('chatStatus').textContent = 'Read-only mode';
+            fetch(`/api/whatsapp/messages/${encodeURIComponent(chatId)}?deviceId=${deviceId}`, {
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.code === 'SUCCESS' && data.results.length > 0) {
+                    const messages = data.results;
+                    container.innerHTML = messages.map(msg => `
+                        <div class="message ${msg.fromMe ? 'sent' : 'received'}">
+                            <div class="message-bubble">
+                                <div class="message-text">${escapeHtml(msg.message)}</div>
+                                <div class="message-time">${formatMessageTime(msg.timestamp)}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    // Scroll to bottom
+                    container.scrollTop = container.scrollHeight;
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center text-muted p-4">
+                            <i class="bi bi-chat-dots"></i>
+                            <p>No messages to display</p>
+                            <small>Messages may take time to load after connection</small>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('chatStatus').textContent = 'Read-only mode';
+            })
+            .catch(error => {
+                console.error('Error loading messages:', error);
+                container.innerHTML = `
+                    <div class="text-center text-muted p-4">
+                        <i class="bi bi-exclamation-circle"></i>
+                        <p>Failed to load messages</p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            });
         }
         
         // Search functionality
@@ -756,6 +787,15 @@
                 return '+' + phone;
             }
             return phone;
+        }
+        
+        function formatMessageTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+            });
         }
     </script>
 </body>

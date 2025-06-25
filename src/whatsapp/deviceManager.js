@@ -57,6 +57,10 @@ class WhatsAppManager {
                 generateHighQualityLinkPreview: false,
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
+                // Add connection retry config
+                retryRequestDelayMs: 2000,
+                maxMsgRetryCount: 5,
+                // Ensure connection stays stable
                 getMessage: async (key) => {
                     return { conversation: 'Hello' };
                 }
@@ -174,6 +178,19 @@ class WhatsAppManager {
                     }
                 }
             });
+            
+            // Add connection stability - keep alive
+            const keepAlive = setInterval(() => {
+                if (sock.user && sock.ws && sock.ws.readyState === 1) {
+                    // Send presence update to keep connection alive
+                    sock.sendPresenceUpdate('available').catch(() => {
+                        console.log(`Keep-alive failed for device ${deviceId}`);
+                    });
+                }
+            }, 30000); // Every 30 seconds
+            
+            // Store client with keepAlive reference
+            this.clients.set(deviceId, { sock, keepAlive });
 
         } catch (error) {
             console.error(`Error connecting device ${deviceId}:`, error);
@@ -188,9 +205,19 @@ class WhatsAppManager {
     // Disconnect a device
     async disconnectDevice(deviceId) {
         try {
-            const client = this.clients.get(deviceId);
-            if (client) {
-                await client.logout();
+            const clientData = this.clients.get(deviceId);
+            if (clientData) {
+                // Clear keep-alive interval
+                if (clientData.keepAlive) {
+                    clearInterval(clientData.keepAlive);
+                }
+                
+                // Logout from WhatsApp
+                const client = clientData.sock || clientData;
+                if (client && client.logout) {
+                    await client.logout();
+                }
+                
                 this.clients.delete(deviceId);
             }
             
@@ -209,7 +236,11 @@ class WhatsAppManager {
 
     // Get WhatsApp client for a device
     getClient(deviceId) {
-        return this.clients.get(deviceId);
+        const clientData = this.clients.get(deviceId);
+        if (clientData) {
+            return clientData.sock || clientData;
+        }
+        return null;
     }
 
     // Get QR code for a device

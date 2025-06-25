@@ -302,7 +302,7 @@ router.get('/chats', async (req, res) => {
         }
         
         const client = global.whatsappManager.getClient(deviceId);
-        if (!client) {
+        if (!client || !client.user) {
             return res.json({
                 code: 'SUCCESS',
                 results: [],
@@ -310,13 +310,41 @@ router.get('/chats', async (req, res) => {
             });
         }
         
-        // For now, return empty array as getting chats requires more setup
-        // In a real implementation, you would get chats from the WhatsApp connection
-        res.json({
-            code: 'SUCCESS',
-            results: [],
-            message: 'Chats feature coming soon'
-        });
+        try {
+            // Get all chats from store
+            const chats = await client.store?.chats?.all() || [];
+            
+            // Filter and format chats - ONLY PERSONAL CHATS (no groups)
+            const formattedChats = chats
+                .filter(chat => {
+                    // Only include personal chats (not groups, not broadcast)
+                    return chat.id && chat.id.includes('@s.whatsapp.net');
+                })
+                .map(chat => {
+                    const contact = client.store?.contacts?.[chat.id];
+                    return {
+                        id: chat.id,
+                        name: contact?.name || contact?.notify || chat.name || chat.id.split('@')[0],
+                        isGroup: false,
+                        lastMessage: chat.conversationTimestamp ? new Date(chat.conversationTimestamp * 1000).toISOString() : null,
+                        unreadCount: chat.unreadCount || 0,
+                        timestamp: chat.conversationTimestamp || Date.now() / 1000
+                    };
+                })
+                .sort((a, b) => b.timestamp - a.timestamp); // Sort by most recent
+            
+            res.json({
+                code: 'SUCCESS',
+                results: formattedChats
+            });
+        } catch (error) {
+            console.error('Error processing chats:', error);
+            res.json({
+                code: 'SUCCESS',
+                results: [],
+                message: 'Error loading chats: ' + error.message
+            });
+        }
         
     } catch (error) {
         console.error('Error getting chats:', error);
@@ -349,7 +377,7 @@ router.get('/contacts', async (req, res) => {
         }
         
         const client = global.whatsappManager.getClient(deviceId);
-        if (!client) {
+        if (!client || !client.user) {
             return res.json({
                 code: 'SUCCESS',
                 results: [],
@@ -357,18 +385,120 @@ router.get('/contacts', async (req, res) => {
             });
         }
         
-        // For now, return empty array as getting contacts requires more setup
-        res.json({
-            code: 'SUCCESS',
-            results: [],
-            message: 'Contacts feature coming soon'
-        });
+        try {
+            // Get all contacts from store
+            const contacts = client.store?.contacts || {};
+            
+            // Format contacts - only personal contacts (not groups)
+            const formattedContacts = Object.values(contacts)
+                .filter(contact => {
+                    // Only include contacts with phone numbers (not groups)
+                    return contact.id && contact.id.includes('@s.whatsapp.net');
+                })
+                .map(contact => ({
+                    id: contact.id,
+                    name: contact.name || contact.notify || contact.verifiedName || contact.id.split('@')[0],
+                    phone: contact.id.split('@')[0],
+                    isMyContact: contact.isMyContact || false,
+                    profilePicture: contact.profilePicture || null
+                }))
+                .sort((a, b) => {
+                    // Sort by name
+                    const nameA = a.name.toLowerCase();
+                    const nameB = b.name.toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+            
+            res.json({
+                code: 'SUCCESS',
+                results: formattedContacts
+            });
+        } catch (error) {
+            console.error('Error processing contacts:', error);
+            res.json({
+                code: 'SUCCESS',
+                results: [],
+                message: 'Error loading contacts: ' + error.message
+            });
+        }
         
     } catch (error) {
         console.error('Error getting contacts:', error);
         res.json({
             code: 'ERROR',
             message: error.message || 'Failed to get contacts',
+            results: []
+        });
+    }
+});
+
+// Get messages for a chat
+router.get('/messages/:chatId', async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const { deviceId } = req.query;
+        
+        if (!deviceId || !chatId) {
+            return res.status(400).json({
+                code: 'ERROR',
+                message: 'Device ID and Chat ID are required'
+            });
+        }
+        
+        if (!global.whatsappManager) {
+            return res.json({
+                code: 'SUCCESS',
+                results: [],
+                message: 'WhatsApp manager not initialized'
+            });
+        }
+        
+        const client = global.whatsappManager.getClient(deviceId);
+        if (!client || !client.user) {
+            return res.json({
+                code: 'SUCCESS',
+                results: [],
+                message: 'Device not connected'
+            });
+        }
+        
+        try {
+            // Load messages for the chat
+            const messages = await client.store?.messages?.[chatId]?.array || [];
+            
+            // Format messages
+            const formattedMessages = messages
+                .slice(-50) // Get last 50 messages
+                .map(msg => ({
+                    id: msg.key.id,
+                    fromMe: msg.key.fromMe,
+                    message: msg.message?.conversation || 
+                            msg.message?.extendedTextMessage?.text || 
+                            msg.message?.imageMessage?.caption ||
+                            msg.message?.videoMessage?.caption ||
+                            '[Media]',
+                    timestamp: msg.messageTimestamp,
+                    status: msg.status
+                }));
+            
+            res.json({
+                code: 'SUCCESS',
+                results: formattedMessages
+            });
+        } catch (error) {
+            console.error('Error loading messages:', error);
+            res.json({
+                code: 'SUCCESS',
+                results: [],
+                message: 'Messages not available'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error getting messages:', error);
+        res.json({
+            code: 'ERROR',
+            message: error.message || 'Failed to get messages',
             results: []
         });
     }
