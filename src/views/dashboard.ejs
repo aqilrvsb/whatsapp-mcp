@@ -306,6 +306,19 @@
             gap: 2px;
         }
         
+        .campaign-item:hover .action-icons {
+            display: flex !important;
+        }
+        
+        .campaign-item .action-icons {
+            position: absolute;
+            right: 5px;
+            top: 5px;
+            background: rgba(0,0,0,0.5);
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        
         .campaign-item .status-icon {
             font-size: 8px;
             margin-right: 2px;
@@ -1997,26 +2010,44 @@
                 let campaignHTML = '';
                 if (Array.isArray(dayCampaigns)) {
                     dayCampaigns.slice(0, 5).forEach(campaign => {
-                        // Determine status icon
+                        // Determine status color and icon based on campaign status
+                        let statusClass = '';
                         let statusIcon = '';
-                        if (campaign.status === 'delivered') {
-                            statusIcon = '<i class="bi bi-check-circle-fill status-icon" style="color: #25d366;"></i>';
+                        let bgColor = '';
+                        
+                        if (campaign.status === 'completed' || campaign.status === 'delivered') {
+                            statusClass = 'text-success';
+                            statusIcon = '<i class="bi bi-check-circle-fill"></i>';
+                            bgColor = 'bg-success';
                         } else if (campaign.status === 'failed' || campaign.status === 'cancelled') {
-                            statusIcon = '<i class="bi bi-x-circle-fill status-icon" style="color: #e74c3c;"></i>';
-                        } else if (campaign.status === 'ongoing' || campaign.status === 'sending') {
-                            statusIcon = '<i class="bi bi-arrow-repeat status-icon" style="color: #f39c12;"></i>';
-                        } else {
-                            statusIcon = '<i class="bi bi-clock-fill status-icon" style="color: #95a5a6;"></i>';
+                            statusClass = 'text-danger';
+                            statusIcon = '<i class="bi bi-x-circle-fill"></i>';
+                            bgColor = 'bg-danger';
+                        } else if (campaign.status === 'ongoing' || campaign.status === 'sending' || campaign.status === 'processing') {
+                            statusClass = 'text-warning';
+                            statusIcon = '<i class="bi bi-arrow-repeat"></i>';
+                            bgColor = 'bg-warning';
+                        } else { // scheduled, pending, etc.
+                            statusClass = 'text-secondary';
+                            statusIcon = '<i class="bi bi-clock-fill"></i>';
+                            bgColor = 'bg-secondary';
                         }
                         
+                        // Create campaign item with all details
                         campaignHTML += `
-                            <div class="campaign-item" title="${campaign.title}">
-                                ${statusIcon}
-                                <span>${campaign.niche || campaign.title}</span>
-                                <div class="action-icons">
-                                    <i class="bi bi-pencil" onclick="editCampaign(event, '${campaign.id}', '${dateStr}')" title="Edit"></i>
-                                    <i class="bi bi-trash" onclick="deleteCampaign(event, '${campaign.id}')" title="Delete"></i>
+                            <div class="campaign-item ${bgColor} text-white p-2 mb-1 rounded" style="font-size: 12px;">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div class="text-truncate" style="max-width: 70%;">
+                                        ${statusIcon}
+                                        <strong>${campaign.title || 'Untitled'}</strong>
+                                    </div>
+                                    <div class="action-icons" style="display: none;">
+                                        <i class="bi bi-pencil text-white" onclick="editCampaign(event, ${campaign.id}, '${dateStr}')" title="Edit" style="cursor: pointer; margin-right: 5px;"></i>
+                                        <i class="bi bi-trash text-white" onclick="deleteCampaign(event, ${campaign.id})" title="Delete" style="cursor: pointer;"></i>
+                                    </div>
                                 </div>
+                                ${campaign.niche ? `<div class="text-truncate" style="opacity: 0.9;"><small>Niche: ${campaign.niche}</small></div>` : ''}
+                                ${campaign.scheduled_time ? `<div style="opacity: 0.9;"><small>Time: ${campaign.scheduled_time}</small></div>` : ''}
                             </div>`;
                     });
                 }
@@ -2228,7 +2259,7 @@
             
             // Find the campaign in the campaigns array
             const dayCampaigns = campaigns[dateStr] || [];
-            const campaign = dayCampaigns.find(c => c.id === campaignId);
+            const campaign = dayCampaigns.find(c => c.id == campaignId);
             
             if (campaign) {
                 document.getElementById('campaignId').value = campaign.id;

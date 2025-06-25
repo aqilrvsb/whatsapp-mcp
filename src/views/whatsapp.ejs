@@ -433,12 +433,12 @@
     </style>
 </head>
 <body>
-    <div class="device-info-bar <%= device.status === 'offline' ? 'offline' : '' %>" id="deviceInfoBar">
+    <div class="device-info-bar <%= device && device.status === 'offline' ? 'offline' : '' %>" id="deviceInfoBar">
         <div class="device-info">
-            <div class="status-dot <%= device.status === 'offline' ? 'offline' : '' %>" id="statusDot"></div>
-            <span>Device: <strong id="deviceName"><%= device.deviceName %></strong></span>
+            <div class="status-dot <%= device && device.status === 'offline' ? 'offline' : '' %>" id="statusDot"></div>
+            <span>Device: <strong id="deviceName"><%= device ? (device.deviceName || 'Unknown') : 'Loading...' %></strong></span>
             <span>|</span>
-            <span>Phone: <strong id="devicePhone"><%= device.phone || 'Not connected' %></strong></span>
+            <span>Phone: <strong id="devicePhone"><%= device && device.phone ? device.phone : 'Not connected' %></strong></span>
         </div>
         <a href="/dashboard" class="btn-dashboard">
             <i class="bi bi-arrow-left"></i> Back to Dashboard
@@ -521,20 +521,36 @@
     </div>
 
     <script>
-        const deviceId = '<%= device.id %>';
+        const deviceId = '<%= device ? device.id : "" %>';
         let currentView = 'chats';
         let chats = [];
         let contacts = [];
         let selectedChat = null;
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            loadChats();
-            loadContacts();
-            
-            // Search functionality
-            document.getElementById('searchInput').addEventListener('input', handleSearch);
-        });
+        // Check if device exists
+        if (!deviceId) {
+            document.getElementById('chatList').innerHTML = `
+                <div class="error-message">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <p>Device not found. Please go back to dashboard.</p>
+                </div>
+            `;
+            document.getElementById('contactList').innerHTML = `
+                <div class="error-message">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <p>Device not found. Please go back to dashboard.</p>
+                </div>
+            `;
+        } else {
+            // Initialize
+            document.addEventListener('DOMContentLoaded', function() {
+                loadChats();
+                loadContacts();
+                
+                // Search functionality
+                document.getElementById('searchInput').addEventListener('input', handleSearch);
+            });
+        }
         
         // Switch between tabs
         function switchTab(tab) {

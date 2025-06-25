@@ -287,19 +287,15 @@
                     return response.json();
                 })
                 .then(data => {
-                    if (data.code === 'SUCCESS' && data.results) {
-                        const device = data.results;
-                        document.getElementById('deviceName').textContent = device.name || 'Unknown Device';
+                    // Handle both wrapped and unwrapped responses
+                    const device = data.results || data;
+                    
+                    if (device) {
+                        document.getElementById('deviceName').textContent = device.deviceName || 'Unknown Device';
                         document.getElementById('devicePhone').textContent = device.phone || 'Not connected';
                         
                         const statusEl = document.getElementById('deviceStatus');
                         statusEl.className = `device-status ${device.status}`;
-                        
-                        // Update the loading section
-                        const loadingSection = document.querySelector('.device-info h4');
-                        if (loadingSection) {
-                            loadingSection.textContent = device.name || 'Device';
-                        }
                         
                         if (device.status !== 'online') {
                             showWarning('This device is not connected. Please connect it first from the Devices tab.');
