@@ -1,136 +1,88 @@
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
-const { getDB } = require('../config/database');
-const { requireAuth } = require('./auth');
-
 const router = express.Router();
+const { getUserRepository } = require('../repository/userRepository');
+const { getDB } = require('../config/database');
 
-// Apply auth middleware to all routes
-router.use(requireAuth);
-
-// List user devices
+// Get all devices for logged-in user
 router.get('/', async (req, res) => {
-    const db = getDB();
-    
     try {
-        const result = await db.query(
-            'SELECT id, device_name, phone, jid, status, last_seen, created_at FROM user_devices WHERE user_id = $1 ORDER BY created_at DESC',
-            [req.session.userId]
-        );
+        const db = getDB();
+        const userRepo = getUserRepository(db);
         
-        res.json({
-            success: true,
-            devices: result.rows
-        });
+        const devices = await userRepo.getUserDevices(req.user.id);
+        res.json(devices);
     } catch (error) {
-        console.error('Error fetching devices:', error);
-        res.status(500).json({ error: 'Failed to fetch devices' });
+        console.error('Error getting devices:', error);
+        res.status(500).json({ error: 'Failed to get devices' });
     }
 });
 
-// Get device details
-router.get('/:id', async (req, res) => {
-    const db = getDB();
-    const deviceId = req.params.id;
-    
-    try {
-        const result = await db.query(
-            'SELECT * FROM user_devices WHERE id = $1 AND user_id = $2',
-            [deviceId, req.session.userId]
-        );
-        
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Device not found' });
-        }
-        
-        res.json({
-            success: true,
-            device: result.rows[0]
-        });
-    } catch (error) {
-        console.error('Error fetching device:', error);
-        res.status(500).json({ error: 'Failed to fetch device' });
-    }
-});
-
-// Create new device
+// Add new device
 router.post('/', async (req, res) => {
-    const { deviceName } = req.body;
-    
-    if (!deviceName) {
-        return res.status(400).json({ error: 'Device name is required' });
-    }
-    
-    const db = getDB();
-    
     try {
-        const result = await db.query(
-            'INSERT INTO user_devices (user_id, device_name) VALUES ($1, $2) RETURNING *',
-            [req.session.userId, deviceName]
-        );
+        const { deviceName } = req.body;
         
-        const device = result.rows[0];
+        if (!deviceName) {
+            return res.status(400).json({ error: 'Device name is required' });
+        }
         
-        res.json({
-            success: true,
-            device: device
-        });
+        const db = getDB();
+        const userRepo = getUserRepository(db);
+        
+        const device = await userRepo.addUserDevice(req.user.id, deviceName);
+        res.json(device);
     } catch (error) {
-        console.error('Error creating device:', error);
-        res.status(500).json({ error: 'Failed to create device' });
+        console.error('Error adding device:', error);
+        res.status(500).json({ error: 'Failed to add device' });
     }
 });
 
-// Update device
-router.put('/:id', async (req, res) => {
-    const db = getDB();
-    const deviceId = req.params.id;
-    const { deviceName } = req.body;
-    
+// Get device by ID
+router.get('/:id', async (req, res) => {
     try {
-        const result = await db.query(
-            'UPDATE user_devices SET device_name = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-            [deviceName, deviceId, req.session.userId]
-        );
+        const { id } = req.params;
+        const db = getDB();
+        const userRepo = getUserRepository(db);
         
-        if (result.rows.length === 0) {
+        // Check ownership
+        const owns = await userRepo.userOwnsDevice(req.user.id, id);
+        if (!owns) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        
+        const device = await userRepo.getDevice(id);
+        if (!device) {
             return res.status(404).json({ error: 'Device not found' });
         }
         
-        res.json({
-            success: true,
-            device: result.rows[0]
-        });
+        res.json(device);
     } catch (error) {
-        console.error('Error updating device:', error);
-        res.status(500).json({ error: 'Failed to update device' });
+        console.error('Error getting device:', error);
+        res.status(500).json({ error: 'Failed to get device' });
     }
 });
-
 // Delete device
 router.delete('/:id', async (req, res) => {
-    const db = getDB();
-    const deviceId = req.params.id;
-    const whatsappManager = req.whatsappManager;
-    
     try {
-        // Disconnect WhatsApp if connected
-        await whatsappManager.disconnectDevice(deviceId);
+        const { id } = req.params;
+        const db = getDB();
+        const userRepo = getUserRepository(db);
         
-        // Delete from database
-        const result = await db.query(
-            'DELETE FROM user_devices WHERE id = $1 AND user_id = $2 RETURNING id',
-            [deviceId, req.session.userId]
-        );
-        
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Device not found' });
+        // Check ownership
+        const owns = await userRepo.userOwnsDevice(req.user.id, id);
+        if (!owns) {
+            return res.status(403).json({ error: 'Access denied' });
         }
         
-        res.json({
-            success: true,
-            message: 'Device deleted successfully'
-        });
+        // Disconnect WhatsApp if connected
+        if (global.whatsappManager) {
+            await global.whatsappManager.disconnectDevice(id);
+        }
+        
+        // Delete from database
+        await userRepo.deleteDevice(id);
+        
+        res.json({ message: 'Device deleted successfully' });
     } catch (error) {
         console.error('Error deleting device:', error);
         res.status(500).json({ error: 'Failed to delete device' });
@@ -139,125 +91,145 @@ router.delete('/:id', async (req, res) => {
 
 // Get QR code for device
 router.get('/:id/qr', async (req, res) => {
-    const deviceId = req.params.id;
-    const whatsappManager = req.whatsappManager;
-    
     try {
-        // Verify device ownership
+        const { id } = req.params;
         const db = getDB();
-        const device = await db.query(
-            'SELECT id FROM user_devices WHERE id = $1 AND user_id = $2',
-            [deviceId, req.session.userId]
-        );
+        const userRepo = getUserRepository(db);
         
-        if (device.rows.length === 0) {
+        // Check ownership
+        const owns = await userRepo.userOwnsDevice(req.user.id, id);
+        if (!owns) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        
+        const device = await userRepo.getDevice(id);
+        if (!device) {
             return res.status(404).json({ error: 'Device not found' });
         }
         
-        // Connect device
-        await whatsappManager.connectDevice(deviceId, req.session.userId);
-        
-        // Get QR code
-        const connection = whatsappManager.getConnection(deviceId);
-        
-        res.json({
-            success: true,
-            qr: connection?.qr || null,
-            status: connection?.isConnected ? 'connected' : 'waiting'
-        });
+        // Generate QR code page
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Connect ${device.deviceName}</title>
+                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                <style>
+                    body {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        height: 100vh;
+                        background-color: #f0f2f5;
+                    }
+                    .qr-container {
+                        background: white;
+                        padding: 40px;
+                        border-radius: 16px;
+                        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+                        text-align: center;
+                    }                    #qrcode {
+                        width: 300px;
+                        height: 300px;
+                        margin: 20px auto;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="qr-container">
+                    <h3>Connect ${device.deviceName}</h3>
+                    <p>Scan this QR code with WhatsApp</p>
+                    <div id="qrcode">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <p class="text-muted">Open WhatsApp > Settings > Linked Devices > Link a Device</p>
+                    <a href="/dashboard" class="btn btn-secondary mt-3">Back to Dashboard</a>
+                </div>
+                
+                <script src="/socket.io/socket.io.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+                <script>
+                    const socket = io();
+                    const deviceId = '${device.id}';
+                    
+                    socket.emit('connect-device', { deviceId });
+                    
+                    socket.on('qr', (data) => {
+                        if (data.deviceId === deviceId) {
+                            const qrContainer = document.getElementById('qrcode');
+                            qrContainer.innerHTML = '';
+                            QRCode.toCanvas(qrContainer, data.qr, {
+                                width: 300,
+                                margin: 2
+                            });
+                        }
+                    });
+                    
+                    socket.on('device-connected', (data) => {
+                        if (data.deviceId === deviceId) {
+                            alert('Device connected successfully!');
+                            window.location.href = '/dashboard';
+                        }
+                    });
+                </script>
+            </body>
+            </html>
+        `);
     } catch (error) {
-        console.error('Error getting QR code:', error);
-        res.status(500).json({ error: 'Failed to get QR code' });
+        console.error('Error showing QR:', error);
+        res.status(500).json({ error: 'Failed to generate QR code' });
+    }
+});
+
+// Update device phone
+router.put('/:id/phone', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { phone } = req.body;        
+        const db = getDB();
+        const userRepo = getUserRepository(db);
+        
+        // Check ownership
+        const owns = await userRepo.userOwnsDevice(req.user.id, id);
+        if (!owns) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        
+        await userRepo.updateDevicePhone(id, phone);
+        res.json({ message: 'Phone number updated' });
+    } catch (error) {
+        console.error('Error updating phone:', error);
+        res.status(500).json({ error: 'Failed to update phone' });
     }
 });
 
 // Logout device
 router.post('/:id/logout', async (req, res) => {
-    const deviceId = req.params.id;
-    const whatsappManager = req.whatsappManager;
-    
     try {
-        // Verify device ownership
+        const { id } = req.params;
         const db = getDB();
-        const device = await db.query(
-            'SELECT id FROM user_devices WHERE id = $1 AND user_id = $2',
-            [deviceId, req.session.userId]
-        );
+        const userRepo = getUserRepository(db);
         
-        if (device.rows.length === 0) {
-            return res.status(404).json({ error: 'Device not found' });
+        // Check ownership
+        const owns = await userRepo.userOwnsDevice(req.user.id, id);
+        if (!owns) {
+            return res.status(403).json({ error: 'Access denied' });
         }
         
-        // Disconnect device
-        await whatsappManager.disconnectDevice(deviceId);
+        // Disconnect WhatsApp
+        if (global.whatsappManager) {
+            await global.whatsappManager.disconnectDevice(id);
+        }
         
-        res.json({
-            success: true,
-            message: 'Device logged out successfully'
-        });
+        // Update status
+        await userRepo.updateDeviceStatus(id, 'offline');
+        
+        res.json({ message: 'Device logged out successfully' });
     } catch (error) {
         console.error('Error logging out device:', error);
         res.status(500).json({ error: 'Failed to logout device' });
-    }
-});
-
-// Get device chats
-router.get('/:id/chats', async (req, res) => {
-    const deviceId = req.params.id;
-    const whatsappManager = req.whatsappManager;
-    
-    try {
-        // Verify device ownership
-        const db = getDB();
-        const device = await db.query(
-            'SELECT id FROM user_devices WHERE id = $1 AND user_id = $2',
-            [deviceId, req.session.userId]
-        );
-        
-        if (device.rows.length === 0) {
-            return res.status(404).json({ error: 'Device not found' });
-        }
-        
-        // Get chats
-        const chats = await whatsappManager.getChats(deviceId);
-        
-        res.json({
-            success: true,
-            chats: chats
-        });
-    } catch (error) {
-        console.error('Error getting chats:', error);
-        res.status(500).json({ error: error.message || 'Failed to get chats' });
-    }
-});
-
-// Get device contacts
-router.get('/:id/contacts', async (req, res) => {
-    const deviceId = req.params.id;
-    const whatsappManager = req.whatsappManager;
-    
-    try {
-        // Verify device ownership
-        const db = getDB();
-        const device = await db.query(
-            'SELECT id FROM user_devices WHERE id = $1 AND user_id = $2',
-            [deviceId, req.session.userId]
-        );
-        
-        if (device.rows.length === 0) {
-            return res.status(404).json({ error: 'Device not found' });
-        }
-        
-        // Get contacts
-        const contacts = await whatsappManager.getContacts(deviceId);
-        
-        res.json({
-            success: true,
-            contacts: contacts
-        });
-    } catch (error) {
-        console.error('Error getting contacts:', error);
-        res.status(500).json({ error: error.message || 'Failed to get contacts' });
     }
 });
 

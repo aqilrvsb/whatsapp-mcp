@@ -1,136 +1,188 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
-const { v4: uuidv4 } = require('uuid');
+const router = express.Router();
+const { getUserRepository } = require('../repository/userRepository');
 const { getDB } = require('../config/database');
 
-const router = express.Router();
-
-// Register new user
-router.post('/register', async (req, res) => {
-    const { email, password, fullName } = req.body;
-    
-    if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
-    }
-    
-    const db = getDB();
-    
-    try {
-        // Check if user exists
-        const existingUser = await db.query('SELECT id FROM users WHERE email = $1', [email]);
-        if (existingUser.rows.length > 0) {
-            return res.status(400).json({ error: 'User already exists' });
-        }
-        
-        // Hash password
-        const passwordHash = await bcrypt.hash(password, 10);
-        
-        // Create user
-        const result = await db.query(
-            'INSERT INTO users (email, password_hash, full_name) VALUES ($1, $2, $3) RETURNING id, email, full_name',
-            [email, passwordHash, fullName || email]
-        );
-        
-        const user = result.rows[0];
-        
-        // Create session
-        req.session.userId = user.id;
-        req.session.email = user.email;
-        
-        res.json({
-            success: true,
-            user: {
-                id: user.id,
-                email: user.email,
-                fullName: user.full_name
-            }
-        });
-    } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ error: 'Registration failed' });
-    }
+// Login page
+router.get('/login', (req, res) => {
+    res.render('login', { title: 'Login - WhatsApp Analytics' });
 });
 
-// Login
-router.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
-    }
-    
-    const db = getDB();
-    
+// Register page
+router.get('/register', (req, res) => {
+    res.render('register', { title: 'Register - WhatsApp Analytics' });
+});
+
+// Handle login (matches Go implementation)
+router.post('/api/auth/login', async (req, res) => {
     try {
-        // Get user
-        const result = await db.query(
-            'SELECT id, email, password_hash, full_name FROM users WHERE email = $1',
-            [email]
-        );
-        
-        if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({
+                error: 'Email and password are required'
+            });
         }
-        
-        const user = result.rows[0];
-        
-        // Verify password
-        const validPassword = await bcrypt.compare(password, user.password_hash);
-        if (!validPassword) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-        
-        // Update last login
-        await db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
-        
+
+        // Get user repository
+        const db = getDB();
+        const userRepo = getUserRepository(db);
+
+        // Validate credentials
+        const user = await userRepo.validatePassword(email, password);
+
         // Create session
-        req.session.userId = user.id;
-        req.session.email = user.email;
-        
-        res.json({
-            success: true,
+        const session = await userRepo.createSession(user.id);
+
+        // Set session cookie (matching Go implementation)
+        res.cookie('session_token', session.token, {
+            expires: session.expiresAt,
+            httpOnly: true,
+            secure: false, // Set to true in production with HTTPS
+            sameSite: 'lax'
+        });
+
+        return res.json({
+            status: 'success',
+            message: 'Login successful',
+            token: session.token,
             user: {
                 id: user.id,
                 email: user.email,
-                fullName: user.full_name
+                fullName: user.fullName
             }
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ error: 'Login failed' });
+        return res.status(401).json({
+            error: error.message || 'Invalid credentials'
+        });
+    }
+});
+// Handle register (matches Go implementation)
+router.post('/api/auth/register', async (req, res) => {
+    try {
+        const { fullname, email, password } = req.body;
+
+        if (!email || !password || !fullname) {
+            return res.status(400).json({
+                error: 'All fields are required'
+            });
+        }
+
+        // Get user repository
+        const db = getDB();
+        const userRepo = getUserRepository(db);
+
+        // Create user
+        const user = await userRepo.createUser(email, fullname, password);
+
+        // Create session
+        const session = await userRepo.createSession(user.id);
+
+        // Set session cookie
+        res.cookie('session_token', session.token, {
+            expires: session.expiresAt,
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax'
+        });
+
+        return res.json({
+            status: 'success',
+            message: 'Registration successful',
+            token: session.token,
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName
+            }
+        });
+    } catch (error) {
+        console.error('Register error:', error);
+        
+        if (error.message.includes('already exists')) {
+            return res.status(409).json({
+                error: 'Email already registered'
+            });
+        }
+        
+        return res.status(500).json({
+            error: 'Registration failed'
+        });
+    }
+});
+// Handle logout
+router.post('/api/auth/logout', async (req, res) => {
+    try {
+        const sessionToken = req.cookies.session_token;
+        
+        if (sessionToken) {
+            const db = getDB();
+            const userRepo = getUserRepository(db);
+            await userRepo.deleteSession(sessionToken);
+        }
+
+        // Clear cookie
+        res.clearCookie('session_token');
+        
+        return res.json({
+            status: 'success',
+            message: 'Logged out successfully'
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+        return res.status(500).json({
+            error: 'Logout failed'
+        });
     }
 });
 
-// Logout
-router.post('/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            return res.status(500).json({ error: 'Logout failed' });
+// Logout GET endpoint (for direct navigation)
+router.get('/logout', async (req, res) => {
+    try {
+        const sessionToken = req.cookies.session_token;
+        
+        if (sessionToken) {
+            const db = getDB();
+            const userRepo = getUserRepository(db);
+            await userRepo.deleteSession(sessionToken);
         }
-        res.json({ success: true });
-    });
+
+        res.clearCookie('session_token');
+        res.redirect('/login');
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.redirect('/login');
+    }
 });
 
 // Check session
-router.get('/session', (req, res) => {
-    if (req.session.userId) {
-        res.json({
-            authenticated: true,
-            userId: req.session.userId,
-            email: req.session.email
+router.get('/api/auth/session', async (req, res) => {
+    try {
+        const sessionToken = req.cookies.session_token;
+        
+        if (!sessionToken) {
+            return res.status(401).json({ error: 'No session' });
+        }
+
+        const db = getDB();
+        const userRepo = getUserRepository(db);
+        
+        const session = await userRepo.getSession(sessionToken);
+        const user = await userRepo.getUserById(session.userId);
+        
+        return res.json({
+            status: 'success',
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName
+            }
         });
-    } else {
-        res.json({ authenticated: false });
+    } catch (error) {
+        return res.status(401).json({ error: 'Invalid session' });
     }
 });
 
-// Middleware to check authentication
-function requireAuth(req, res, next) {
-    if (!req.session.userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
-}
-
 module.exports = router;
-module.exports.requireAuth = requireAuth;
