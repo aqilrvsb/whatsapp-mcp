@@ -13,6 +13,7 @@ class WhatsAppManager {
         this.clients = new Map(); // deviceId -> WhatsApp client
         this.sessions = new Map(); // deviceId -> session data
         this.qrTimeouts = new Map(); // deviceId -> timeout
+        this.recentChats = new Map(); // deviceId -> Set of recent chat IDs
     }
 
     // Connect a device
@@ -186,11 +187,32 @@ class WhatsAppManager {
             // Handle messages for analytics
             sock.ev.on('messages.upsert', async (m) => {
                 const messages = m.messages;
+                
+                // Initialize recent chats set for this device if not exists
+                if (!this.recentChats.has(deviceId)) {
+                    this.recentChats.set(deviceId, new Map());
+                }
+                const deviceChats = this.recentChats.get(deviceId);
+                
                 for (const msg of messages) {
+                    // Track message for analytics
                     if (msg.key.fromMe) {
                         await this.trackMessage(deviceId, userId, 'sent');
                     } else {
                         await this.trackMessage(deviceId, userId, 'received');
+                    }
+                    
+                    // Add to recent chats if it's a personal chat
+                    const chatId = msg.key.remoteJid;
+                    if (chatId && chatId.includes('@s.whatsapp.net')) {
+                        // Update chat info
+                        deviceChats.set(chatId, {
+                            id: chatId,
+                            name: msg.pushName || chatId.split('@')[0],
+                            lastMessage: msg.messageTimestamp,
+                            lastMessageContent: msg.message?.conversation || msg.message?.extendedTextMessage?.text || 'Media',
+                            fromMe: msg.key.fromMe
+                        });
                     }
                 }
             });
@@ -298,19 +320,30 @@ class WhatsAppManager {
     // Get chats for a device
     async getChats(deviceId) {
         try {
-            const client = this.clients.get(deviceId);
-            if (!client) {
+            const clientData = this.clients.get(deviceId);
+            if (!clientData) {
                 throw new Error('Device not connected');
             }
-
-            const chats = await client.groupFetchAllParticipating();
             
-            return Object.values(chats).map(chat => ({
+            const client = clientData.sock || clientData;
+            
+            // Get chats from our recent chats tracking
+            const deviceChats = this.recentChats.get(deviceId) || new Map();
+            
+            // Convert to array and format
+            const chats = Array.from(deviceChats.values()).map(chat => ({
                 id: chat.id,
-                name: chat.subject || chat.id.split('@')[0],
-                isGroup: chat.id.includes('@g.us'),
-                participants: chat.participants?.length || 0
+                name: chat.name || chat.id.split('@')[0],
+                isGroup: false,
+                lastMessage: chat.lastMessage ? new Date(chat.lastMessage * 1000).toISOString() : null,
+                lastMessageContent: chat.lastMessageContent,
+                fromMe: chat.fromMe,
+                unreadCount: 0,
+                timestamp: chat.lastMessage || Date.now() / 1000
             }));
+            
+            // Sort by most recent
+            return chats.sort((a, b) => b.timestamp - a.timestamp);
         } catch (error) {
             console.error('Error getting chats:', error);
             throw error;

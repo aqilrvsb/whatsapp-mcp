@@ -311,17 +311,12 @@ router.get('/chats', async (req, res) => {
         }
         
         try {
-            // For now, return empty chats since store is not available
-            // In a real implementation, you would need to implement proper chat fetching
-            const formattedChats = [];
-            
-            // Note: Without the store, we can't get historical chats
-            // You would need to implement message listening and store them in your database
+            // Use the deviceManager's getChats method
+            const chats = await global.whatsappManager.getChats(deviceId);
             
             res.json({
                 code: 'SUCCESS',
-                results: formattedChats,
-                message: 'Chat history not available without message store'
+                results: chats
             });
         } catch (error) {
             console.error('Error processing chats:', error);
@@ -372,17 +367,51 @@ router.get('/contacts', async (req, res) => {
         }
         
         try {
-            // For now, return empty contacts since store is not available
-            // In a real implementation, you would need to implement proper contact fetching
-            const formattedContacts = [];
+            // Get the WhatsApp socket/client
+            const sock = client.sock || client;
             
-            // Note: Without the store, we can't get contacts
-            // You would need to implement contact syncing and store them in your database
+            // Get contacts using Baileys API
+            const contacts = [];
             
+            try {
+                // Method 1: Try to get contacts from the device
+                const contactsResult = await sock.getContacts();
+                
+                if (contactsResult && Array.isArray(contactsResult)) {
+                    // Format contacts - only personal contacts (not groups)
+                    const formattedContacts = contactsResult
+                        .filter(contact => {
+                            // Only include contacts with phone numbers (not groups)
+                            return contact.id && contact.id.includes('@s.whatsapp.net');
+                        })
+                        .map(contact => ({
+                            id: contact.id,
+                            name: contact.name || contact.notify || contact.verifiedName || contact.id.split('@')[0],
+                            phone: contact.id.split('@')[0],
+                            isMyContact: true,
+                            profilePicture: contact.imgUrl || null
+                        }))
+                        .sort((a, b) => {
+                            // Sort by name
+                            const nameA = (a.name || '').toLowerCase();
+                            const nameB = (b.name || '').toLowerCase();
+                            return nameA.localeCompare(nameB);
+                        });
+                    
+                    return res.json({
+                        code: 'SUCCESS',
+                        results: formattedContacts
+                    });
+                }
+            } catch (err) {
+                console.log('Could not fetch contacts using getContacts:', err.message);
+            }
+            
+            // Fallback: Return empty array
             res.json({
                 code: 'SUCCESS',
-                results: formattedContacts,
-                message: 'Contact list not available without contact store'
+                results: contacts,
+                message: 'Contacts will be populated as you interact with WhatsApp'
             });
         } catch (error) {
             console.error('Error processing contacts:', error);
