@@ -1,4 +1,4 @@
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeInMemoryStore } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const path = require('path');
@@ -51,6 +51,20 @@ class WhatsAppManager {
                 version = [2, 2413, 1]; // Default version
             }
 
+            // Try to create store if available
+            let store;
+            try {
+                if (makeInMemoryStore) {
+                    store = makeInMemoryStore({
+                        logger: pino({ level: 'silent' })
+                    });
+                    console.log('In-memory store created successfully');
+                }
+            } catch (error) {
+                console.log('Store creation failed, continuing without store:', error.message);
+                store = null;
+            }
+
             // Create WhatsApp socket with proper configuration
             const sock = makeWASocket({
                 version,
@@ -69,6 +83,12 @@ class WhatsAppManager {
                 retryRequestDelayMs: 2000,
                 maxMsgRetryCount: 5
             });
+
+            // Bind store to socket if available
+            if (store) {
+                store.bind(sock.ev);
+                sock.store = store; // Attach store to socket for easy access
+            }
 
             // Store client
             this.clients.set(deviceId, sock);
@@ -178,21 +198,31 @@ class WhatsAppManager {
                     
                     // Notify frontend
                     this.io.emit('device-connected', { deviceId, phone, jid });
+                    
+                    // Load initial chats after connection
+                    setTimeout(async () => {
+                        try {
+                            console.log(`Loading initial chats for device ${deviceId}`);
+                            
+                            // Try to fetch existing chats from WhatsApp
+                            // This will populate the database with existing personal chats
+                            await this.syncExistingChats(deviceId, sock);
+                            
+                            const chats = await this.getChats(deviceId);
+                            console.log(`Loaded ${chats.length} chats for device ${deviceId}`);
+                        } catch (err) {
+                            console.error('Error loading initial chats:', err);
+                        }
+                    }, 2000); // Wait 2 seconds for connection to stabilize
                 }
             });
 
             // Save credentials
             sock.ev.on('creds.update', saveCreds);
 
-            // Handle messages for analytics
+            // Handle messages for analytics and storage
             sock.ev.on('messages.upsert', async (m) => {
                 const messages = m.messages;
-                
-                // Initialize recent chats set for this device if not exists
-                if (!this.recentChats.has(deviceId)) {
-                    this.recentChats.set(deviceId, new Map());
-                }
-                const deviceChats = this.recentChats.get(deviceId);
                 
                 for (const msg of messages) {
                     // Track message for analytics
@@ -202,17 +232,57 @@ class WhatsAppManager {
                         await this.trackMessage(deviceId, userId, 'received');
                     }
                     
-                    // Add to recent chats if it's a personal chat
-                    const chatId = msg.key.remoteJid;
-                    if (chatId && chatId.includes('@s.whatsapp.net')) {
-                        // Update chat info
-                        deviceChats.set(chatId, {
-                            id: chatId,
-                            name: msg.pushName || chatId.split('@')[0],
-                            lastMessage: msg.messageTimestamp,
-                            lastMessageContent: msg.message?.conversation || msg.message?.extendedTextMessage?.text || 'Media',
-                            fromMe: msg.key.fromMe
-                        });
+                    // Store message in PostgreSQL
+                    try {
+                        const chatId = msg.key.remoteJid;
+                        
+                        // Only store personal chats
+                        if (chatId && chatId.includes('@s.whatsapp.net')) {
+                            const db = getDB();
+                            
+                            // First, ensure chat exists in whatsapp_chats table
+                            await db.none(`
+                                INSERT INTO whatsapp_chats (device_id, chat_jid, chat_name, is_group, last_message_text, last_message_time, unread_count)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                ON CONFLICT (device_id, chat_jid) 
+                                DO UPDATE SET 
+                                    last_message_text = EXCLUDED.last_message_text,
+                                    last_message_time = EXCLUDED.last_message_time,
+                                    unread_count = CASE 
+                                        WHEN whatsapp_chats.last_message_time < EXCLUDED.last_message_time 
+                                        THEN whatsapp_chats.unread_count + 1 
+                                        ELSE whatsapp_chats.unread_count 
+                                    END,
+                                    updated_at = CURRENT_TIMESTAMP
+                            `, [
+                                deviceId,
+                                chatId,
+                                msg.pushName || chatId.split('@')[0],
+                                false,
+                                msg.message?.conversation || msg.message?.extendedTextMessage?.text || 'Media',
+                                new Date(msg.messageTimestamp * 1000),
+                                msg.key.fromMe ? 0 : 1
+                            ]);
+                            
+                            // Store the message
+                            await db.none(`
+                                INSERT INTO whatsapp_messages (device_id, chat_jid, message_id, sender_jid, sender_name, message_text, message_type, is_sent, timestamp)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                                ON CONFLICT (device_id, message_id) DO NOTHING
+                            `, [
+                                deviceId,
+                                chatId,
+                                msg.key.id,
+                                msg.key.fromMe ? sock.user.id : chatId,
+                                msg.key.fromMe ? 'Me' : (msg.pushName || chatId.split('@')[0]),
+                                msg.message?.conversation || msg.message?.extendedTextMessage?.text || '',
+                                msg.message?.imageMessage ? 'image' : msg.message?.videoMessage ? 'video' : msg.message?.documentMessage ? 'document' : 'text',
+                                msg.key.fromMe,
+                                new Date(msg.messageTimestamp * 1000)
+                            ]);
+                        }
+                    } catch (error) {
+                        console.error('Error storing message:', error);
                     }
                 }
             });
@@ -281,6 +351,57 @@ class WhatsAppManager {
         }
     }
 
+    // Sync existing chats from WhatsApp to database
+    async syncExistingChats(deviceId, sock) {
+        try {
+            console.log('Syncing existing chats from WhatsApp...');
+            const db = getDB();
+            
+            // Try different methods to get chats
+            
+            // Method 1: Check if we have access to chat list
+            if (sock.chats) {
+                try {
+                    const chats = await sock.chats.all();
+                    
+                    for (const chat of chats) {
+                        // Only process personal chats
+                        if (chat.id && chat.id.endsWith('@s.whatsapp.net')) {
+                            await db.none(`
+                                INSERT INTO whatsapp_chats (device_id, chat_jid, chat_name, is_group, last_message_text, last_message_time, unread_count)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                ON CONFLICT (device_id, chat_jid) 
+                                DO UPDATE SET 
+                                    chat_name = EXCLUDED.chat_name,
+                                    unread_count = EXCLUDED.unread_count,
+                                    updated_at = CURRENT_TIMESTAMP
+                            `, [
+                                deviceId,
+                                chat.id,
+                                chat.name || chat.notify || chat.id.split('@')[0],
+                                false,
+                                '', // We'll update this when messages come in
+                                chat.conversationTimestamp ? new Date(parseInt(chat.conversationTimestamp) * 1000) : null,
+                                chat.unreadCount || 0
+                            ]);
+                        }
+                    }
+                    
+                    console.log(`Synced ${chats.length} chats to database`);
+                    return;
+                } catch (err) {
+                    console.log('Method 1 failed:', err.message);
+                }
+            }
+            
+            // Method 2: Try to fetch recent messages to discover chats
+            console.log('Chat list not available, will populate as messages arrive');
+            
+        } catch (error) {
+            console.error('Error syncing chats:', error);
+        }
+    }
+
     // Get WhatsApp client for a device
     getClient(deviceId) {
         const clientData = this.clients.get(deviceId);
@@ -325,25 +446,38 @@ class WhatsAppManager {
                 throw new Error('Device not connected');
             }
             
-            const client = clientData.sock || clientData;
+            // Get personal chats only from PostgreSQL
+            const db = getDB();
+            const chats = await db.any(`
+                SELECT 
+                    chat_jid as id,
+                    chat_name as name,
+                    is_group,
+                    last_message_text,
+                    last_message_time,
+                    unread_count,
+                    avatar_url,
+                    updated_at
+                FROM whatsapp_chats
+                WHERE device_id = $1 
+                AND is_group = false
+                AND chat_jid LIKE '%@s.whatsapp.net'
+                ORDER BY last_message_time DESC NULLS LAST
+            `, [deviceId]);
             
-            // Get chats from our recent chats tracking
-            const deviceChats = this.recentChats.get(deviceId) || new Map();
-            
-            // Convert to array and format
-            const chats = Array.from(deviceChats.values()).map(chat => ({
+            // Format chats for frontend
+            return chats.map(chat => ({
                 id: chat.id,
                 name: chat.name || chat.id.split('@')[0],
+                phone: chat.id.split('@')[0],
                 isGroup: false,
-                lastMessage: chat.lastMessage ? new Date(chat.lastMessage * 1000).toISOString() : null,
-                lastMessageContent: chat.lastMessageContent,
-                fromMe: chat.fromMe,
-                unreadCount: 0,
-                timestamp: chat.lastMessage || Date.now() / 1000
+                lastMessage: chat.last_message_time ? chat.last_message_time.toISOString() : null,
+                lastMessageContent: chat.last_message_text || '',
+                unreadCount: chat.unread_count || 0,
+                avatarUrl: chat.avatar_url || null,
+                timestamp: chat.last_message_time ? chat.last_message_time.getTime() / 1000 : 0
             }));
             
-            // Sort by most recent
-            return chats.sort((a, b) => b.timestamp - a.timestamp);
         } catch (error) {
             console.error('Error getting chats:', error);
             throw error;

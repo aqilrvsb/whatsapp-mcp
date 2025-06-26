@@ -367,51 +367,38 @@ router.get('/contacts', async (req, res) => {
         }
         
         try {
-            // Get the WhatsApp socket/client
-            const sock = client.sock || client;
+            // Get contacts from PostgreSQL database
+            const db = require('../config/database').getDB();
             
-            // Get contacts using Baileys API
-            const contacts = [];
+            // Get all personal chats (which are essentially contacts with chat history)
+            const contacts = await db.any(`
+                SELECT DISTINCT
+                    chat_jid as id,
+                    chat_name as name,
+                    SUBSTRING(chat_jid FROM 1 FOR POSITION('@' IN chat_jid) - 1) as phone,
+                    avatar_url as profilePicture,
+                    last_message_time
+                FROM whatsapp_chats
+                WHERE device_id = $1 
+                AND is_group = false
+                AND chat_jid LIKE '%@s.whatsapp.net'
+                ORDER BY chat_name ASC
+            `, [deviceId]);
             
-            try {
-                // Method 1: Try to get contacts from the device
-                const contactsResult = await sock.getContacts();
-                
-                if (contactsResult && Array.isArray(contactsResult)) {
-                    // Format contacts - only personal contacts (not groups)
-                    const formattedContacts = contactsResult
-                        .filter(contact => {
-                            // Only include contacts with phone numbers (not groups)
-                            return contact.id && contact.id.includes('@s.whatsapp.net');
-                        })
-                        .map(contact => ({
-                            id: contact.id,
-                            name: contact.name || contact.notify || contact.verifiedName || contact.id.split('@')[0],
-                            phone: contact.id.split('@')[0],
-                            isMyContact: true,
-                            profilePicture: contact.imgUrl || null
-                        }))
-                        .sort((a, b) => {
-                            // Sort by name
-                            const nameA = (a.name || '').toLowerCase();
-                            const nameB = (b.name || '').toLowerCase();
-                            return nameA.localeCompare(nameB);
-                        });
-                    
-                    return res.json({
-                        code: 'SUCCESS',
-                        results: formattedContacts
-                    });
-                }
-            } catch (err) {
-                console.log('Could not fetch contacts using getContacts:', err.message);
-            }
+            // Format contacts
+            const formattedContacts = contacts.map(contact => ({
+                id: contact.id,
+                name: contact.name || contact.phone,
+                phone: contact.phone,
+                isMyContact: true,
+                profilePicture: contact.profilePicture || null,
+                hasChat: true,
+                lastSeen: contact.last_message_time ? contact.last_message_time.toISOString() : null
+            }));
             
-            // Fallback: Return empty array
             res.json({
                 code: 'SUCCESS',
-                results: contacts,
-                message: 'Contacts will be populated as you interact with WhatsApp'
+                results: formattedContacts
             });
         } catch (error) {
             console.error('Error processing contacts:', error);
