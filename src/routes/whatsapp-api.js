@@ -311,31 +311,17 @@ router.get('/chats', async (req, res) => {
         }
         
         try {
-            // Get all chats from store
-            const chats = await client.store?.chats?.all() || [];
+            // For now, return empty chats since store is not available
+            // In a real implementation, you would need to implement proper chat fetching
+            const formattedChats = [];
             
-            // Filter and format chats - ONLY PERSONAL CHATS (no groups)
-            const formattedChats = chats
-                .filter(chat => {
-                    // Only include personal chats (not groups, not broadcast)
-                    return chat.id && chat.id.includes('@s.whatsapp.net');
-                })
-                .map(chat => {
-                    const contact = client.store?.contacts?.[chat.id];
-                    return {
-                        id: chat.id,
-                        name: contact?.name || contact?.notify || chat.name || chat.id.split('@')[0],
-                        isGroup: false,
-                        lastMessage: chat.conversationTimestamp ? new Date(chat.conversationTimestamp * 1000).toISOString() : null,
-                        unreadCount: chat.unreadCount || 0,
-                        timestamp: chat.conversationTimestamp || Date.now() / 1000
-                    };
-                })
-                .sort((a, b) => b.timestamp - a.timestamp); // Sort by most recent
+            // Note: Without the store, we can't get historical chats
+            // You would need to implement message listening and store them in your database
             
             res.json({
                 code: 'SUCCESS',
-                results: formattedChats
+                results: formattedChats,
+                message: 'Chat history not available without message store'
             });
         } catch (error) {
             console.error('Error processing chats:', error);
@@ -386,32 +372,17 @@ router.get('/contacts', async (req, res) => {
         }
         
         try {
-            // Get all contacts from store
-            const contacts = client.store?.contacts || {};
+            // For now, return empty contacts since store is not available
+            // In a real implementation, you would need to implement proper contact fetching
+            const formattedContacts = [];
             
-            // Format contacts - only personal contacts (not groups)
-            const formattedContacts = Object.values(contacts)
-                .filter(contact => {
-                    // Only include contacts with phone numbers (not groups)
-                    return contact.id && contact.id.includes('@s.whatsapp.net');
-                })
-                .map(contact => ({
-                    id: contact.id,
-                    name: contact.name || contact.notify || contact.verifiedName || contact.id.split('@')[0],
-                    phone: contact.id.split('@')[0],
-                    isMyContact: contact.isMyContact || false,
-                    profilePicture: contact.profilePicture || null
-                }))
-                .sort((a, b) => {
-                    // Sort by name
-                    const nameA = a.name.toLowerCase();
-                    const nameB = b.name.toLowerCase();
-                    return nameA.localeCompare(nameB);
-                });
+            // Note: Without the store, we can't get contacts
+            // You would need to implement contact syncing and store them in your database
             
             res.json({
                 code: 'SUCCESS',
-                results: formattedContacts
+                results: formattedContacts,
+                message: 'Contact list not available without contact store'
             });
         } catch (error) {
             console.error('Error processing contacts:', error);

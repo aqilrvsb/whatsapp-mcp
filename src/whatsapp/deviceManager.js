@@ -245,8 +245,17 @@ class WhatsAppManager {
             
             // Clear session
             this.sessions.delete(deviceId);
+            
+            // Update device status in database to offline
+            await this.updateDeviceStatus(deviceId, 'offline');
+            
+            // Emit disconnect event to frontend
+            this.io.emit('device-disconnected', { deviceId });
+            
         } catch (error) {
             console.error(`Error disconnecting device ${deviceId}:`, error);
+            // Still update status even if logout fails
+            await this.updateDeviceStatus(deviceId, 'offline');
         }
     }
 

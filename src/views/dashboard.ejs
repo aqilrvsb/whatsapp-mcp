@@ -694,6 +694,18 @@
                 console.error('Socket error:', error);
             });
             
+            // Listen for device disconnect events
+            socket.on('device-disconnected', (data) => {
+                console.log('Device disconnected:', data.deviceId);
+                // Update device status in UI
+                const device = devices.find(d => d.id === data.deviceId);
+                if (device) {
+                    device.status = 'offline';
+                    device.phone = null;
+                    renderDevices();
+                }
+            });
+            
             initializeChart();
             loadDashboardData(7);
             loadDevices();

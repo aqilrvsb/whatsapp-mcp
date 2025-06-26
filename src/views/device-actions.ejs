@@ -548,16 +548,30 @@
             });
         }        
         // Send broadcast
-        function sendBroadcast(e) {
+        async function sendBroadcast(e) {
             e.preventDefault();
             
             const phones = document.getElementById('broadcastPhones').value.split(',').map(p => formatPhone(p.trim()));
             const message = document.getElementById('broadcastMessage').value;
+            const imageFile = document.getElementById('broadcastImage').files[0];
             const resultBox = document.getElementById('broadcastResult');
             
             resultBox.style.display = 'block';
             resultBox.className = 'result-box';
             resultBox.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending broadcast...';
+            
+            let imageUrl = null;
+            
+            // Handle image if provided
+            if (imageFile) {
+                try {
+                    imageUrl = await compressImage(imageFile);
+                } catch (error) {
+                    resultBox.className = 'result-box error-result';
+                    resultBox.innerHTML = `<i class="bi bi-x-circle"></i> Image error: ${error.message}`;
+                    return;
+                }
+            }
             
             // Use the broadcast API endpoint
             fetch('/api/whatsapp/send/broadcast', {
@@ -569,7 +583,8 @@
                 body: JSON.stringify({
                     deviceId: deviceId,
                     phones: phones,
-                    message: message
+                    message: message,
+                    imageUrl: imageUrl
                 })
             })
             .then(response => response.json())
