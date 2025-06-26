@@ -14,6 +14,7 @@ class WhatsAppManager {
         this.sessions = new Map(); // deviceId -> session data
         this.qrTimeouts = new Map(); // deviceId -> timeout
         this.recentChats = new Map(); // deviceId -> Set of recent chat IDs
+        this.statusCheckIntervals = new Map(); // deviceId -> interval for status check
     }
 
     // Connect a device
@@ -236,6 +237,27 @@ class WhatsAppManager {
                             console.error('Error loading initial chats:', err);
                         }
                     }, 2000); // Wait 2 seconds for connection to stabilize
+                    
+                    // Start periodic status check
+                    const statusCheckInterval = setInterval(async () => {
+                        try {
+                            const clientData = this.clients.get(deviceId);
+                            if (clientData && clientData.sock) {
+                                const sock = clientData.sock;
+                                if (!sock.user || sock.ws?.readyState !== 1) {
+                                    console.log(`Device ${deviceId} connection lost`);
+                                    await this.updateDeviceStatus(deviceId, 'offline');
+                                    this.io.emit('device-disconnected', { deviceId });
+                                    clearInterval(statusCheckInterval);
+                                    this.statusCheckIntervals.delete(deviceId);
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Status check error:', err);
+                        }
+                    }, 10000); // Check every 10 seconds
+                    
+                    this.statusCheckIntervals.set(deviceId, statusCheckInterval);
                 }
             });
 
@@ -360,6 +382,12 @@ class WhatsAppManager {
                 this.clients.delete(deviceId);
             }
             
+            // Clear status check interval
+            if (this.statusCheckIntervals.has(deviceId)) {
+                clearInterval(this.statusCheckIntervals.get(deviceId));
+                this.statusCheckIntervals.delete(deviceId);
+            }
+            
             // Clear QR timeout
             if (this.qrTimeouts.has(deviceId)) {
                 clearTimeout(this.qrTimeouts.get(deviceId));
@@ -388,45 +416,66 @@ class WhatsAppManager {
             console.log('Syncing existing chats from WhatsApp...');
             const db = getDB();
             
-            // Try different methods to get chats
-            
-            // Method 1: Check if we have access to chat list
-            if (sock.chats) {
-                try {
-                    const chats = await sock.chats.all();
+            // Method 1: Try to get recent messages to discover chats
+            sock.ev.on('messages.set', async ({ messages }) => {
+                console.log(`Received ${messages.length} historical messages`);
+                
+                for (const msg of messages) {
+                    const chatId = msg.key.remoteJid;
                     
-                    for (const chat of chats) {
-                        // Only process personal chats
-                        if (chat.id && chat.id.endsWith('@s.whatsapp.net')) {
-                            await db.none(`
-                                INSERT INTO whatsapp_chats (device_id, chat_jid, chat_name, is_group, last_message_text, last_message_time, unread_count)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                                ON CONFLICT (device_id, chat_jid) 
-                                DO UPDATE SET 
-                                    chat_name = EXCLUDED.chat_name,
-                                    unread_count = EXCLUDED.unread_count,
-                                    updated_at = CURRENT_TIMESTAMP
-                            `, [
-                                deviceId,
-                                chat.id,
-                                chat.name || chat.notify || chat.id.split('@')[0],
-                                false,
-                                '', // We'll update this when messages come in
-                                chat.conversationTimestamp ? new Date(parseInt(chat.conversationTimestamp) * 1000) : null,
-                                chat.unreadCount || 0
-                            ]);
-                        }
+                    // Only process personal chats
+                    if (chatId && chatId.endsWith('@s.whatsapp.net')) {
+                        const contactName = msg.pushName || msg.key.participant?.split('@')[0] || chatId.split('@')[0];
+                        
+                        // Create/update chat
+                        await db.none(`
+                            INSERT INTO whatsapp_chats (device_id, chat_jid, chat_name, is_group, last_message_text, last_message_time, unread_count)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                            ON CONFLICT (device_id, chat_jid) 
+                            DO UPDATE SET 
+                                chat_name = CASE 
+                                    WHEN whatsapp_chats.chat_name = SUBSTRING(whatsapp_chats.chat_jid FROM 1 FOR POSITION('@' IN whatsapp_chats.chat_jid) - 1)
+                                    THEN EXCLUDED.chat_name
+                                    ELSE whatsapp_chats.chat_name
+                                END,
+                                updated_at = CURRENT_TIMESTAMP
+                        `, [
+                            deviceId,
+                            chatId,
+                            contactName,
+                            false,
+                            msg.message?.conversation || msg.message?.extendedTextMessage?.text || '',
+                            msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000) : new Date(),
+                            0
+                        ]);
+                        
+                        // Store the message
+                        await db.none(`
+                            INSERT INTO whatsapp_messages (device_id, chat_jid, message_id, sender_jid, sender_name, message_text, message_type, is_sent, timestamp)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                            ON CONFLICT (device_id, message_id) DO NOTHING
+                        `, [
+                            deviceId,
+                            chatId,
+                            msg.key.id,
+                            msg.key.fromMe ? sock.user.id : chatId,
+                            msg.key.fromMe ? 'Me' : contactName,
+                            msg.message?.conversation || msg.message?.extendedTextMessage?.text || '',
+                            msg.message?.imageMessage ? 'image' : msg.message?.videoMessage ? 'video' : 'text',
+                            msg.key.fromMe,
+                            msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000) : new Date()
+                        ]);
                     }
-                    
-                    console.log(`Synced ${chats.length} chats to database`);
-                    return;
-                } catch (err) {
-                    console.log('Method 1 failed:', err.message);
                 }
+            });
+            
+            // Method 2: Try to trigger chat sync
+            if (sock.syncFullHistory) {
+                console.log('Requesting full history sync...');
+                sock.syncFullHistory = true;
             }
             
-            // Method 2: Try to fetch recent messages to discover chats
-            console.log('Chat list not available, will populate as messages arrive');
+            console.log('Chat sync initiated, chats will populate as messages are received');
             
         } catch (error) {
             console.error('Error syncing chats:', error);
@@ -522,10 +571,19 @@ class WhatsAppManager {
             if (!client) {
                 throw new Error('Device not connected');
             }
+            
+            const sock = client.sock || client;
+            
+            // Check if client is properly connected
+            if (!sock.user || !sock.user.id) {
+                // Update device status to offline
+                await this.updateDeviceStatus(deviceId, 'offline');
+                throw new Error('WhatsApp is not connected. Please scan QR code again.');
+            }
 
             const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
             
-            await client.sendMessage(jid, { text: message });
+            await sock.sendMessage(jid, { text: message });
             return { success: true };
         } catch (error) {
             console.error('Error sending message:', error);

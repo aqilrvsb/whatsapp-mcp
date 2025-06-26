@@ -565,4 +565,52 @@ router.get('/messages/:chatId', async (req, res) => {
     }
 });
 
+// Refresh chats - force sync
+router.post('/refresh-chats', async (req, res) => {
+    try {
+        const { deviceId } = req.body;
+        
+        if (!deviceId) {
+            return res.status(400).json({
+                code: 'ERROR',
+                message: 'Device ID is required'
+            });
+        }
+        
+        if (!global.whatsappManager) {
+            return res.status(500).json({
+                code: 'ERROR',
+                message: 'WhatsApp manager not initialized'
+            });
+        }
+        
+        const client = global.whatsappManager.getClient(deviceId);
+        if (!client || !client.user) {
+            return res.json({
+                code: 'ERROR',
+                message: 'Device not connected. Please scan QR code first.'
+            });
+        }
+        
+        // Trigger chat sync
+        await global.whatsappManager.syncExistingChats(deviceId, client);
+        
+        // Get updated chats
+        const chats = await global.whatsappManager.getChats(deviceId);
+        
+        res.json({
+            code: 'SUCCESS',
+            message: 'Chat sync initiated',
+            results: chats
+        });
+        
+    } catch (error) {
+        console.error('Error refreshing chats:', error);
+        res.status(500).json({
+            code: 'ERROR',
+            message: error.message || 'Failed to refresh chats'
+        });
+    }
+});
+
 module.exports = router;
