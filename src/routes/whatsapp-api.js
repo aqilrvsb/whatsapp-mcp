@@ -491,4 +491,78 @@ router.get('/messages/:chatId', async (req, res) => {
     }
 });
 
+// Get messages for a specific chat
+router.get('/messages/:chatId', async (req, res) => {
+    try {
+        const { deviceId } = req.query;
+        const { chatId } = req.params;
+        
+        if (!deviceId || !chatId) {
+            return res.status(400).json({
+                code: 'ERROR',
+                message: 'Device ID and Chat ID are required'
+            });
+        }
+        
+        // Get messages from PostgreSQL
+        const db = require('../config/database').getDB();
+        
+        try {
+            const messages = await db.any(`
+                SELECT 
+                    message_id,
+                    sender_jid,
+                    sender_name,
+                    message_text,
+                    message_type,
+                    media_url,
+                    is_sent,
+                    is_read,
+                    timestamp
+                FROM whatsapp_messages
+                WHERE device_id = $1 
+                AND chat_jid = $2
+                ORDER BY timestamp DESC
+                LIMIT 100
+            `, [deviceId, decodeURIComponent(chatId)]);
+            
+            // Format messages for frontend
+            const formattedMessages = messages.map(msg => ({
+                id: msg.message_id,
+                text: msg.message_text || '',
+                type: msg.message_type || 'text',
+                mediaUrl: msg.media_url,
+                fromMe: msg.is_sent,
+                senderName: msg.sender_name,
+                timestamp: msg.timestamp.toISOString(),
+                time: new Date(msg.timestamp).toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                })
+            }));
+            
+            res.json({
+                code: 'SUCCESS',
+                results: formattedMessages.reverse() // Reverse to show oldest first
+            });
+            
+        } catch (error) {
+            console.error('Error fetching messages from database:', error);
+            res.json({
+                code: 'SUCCESS',
+                results: [],
+                message: 'No messages found for this chat'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error getting messages:', error);
+        res.status(500).json({
+            code: 'ERROR',
+            message: error.message || 'Failed to get messages'
+        });
+    }
+});
+
 module.exports = router;

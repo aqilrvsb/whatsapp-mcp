@@ -199,6 +199,28 @@ class WhatsAppManager {
                     // Notify frontend
                     this.io.emit('device-connected', { deviceId, phone, jid });
                     
+                    // Set up contact resolver
+                    sock.ev.on('contacts.update', async (contacts) => {
+                        console.log(`Received ${contacts.length} contact updates`);
+                        const db = getDB();
+                        
+                        for (const contact of contacts) {
+                            if (contact.id && contact.id.endsWith('@s.whatsapp.net')) {
+                                // Update chat name if we have a chat with this contact
+                                await db.none(`
+                                    UPDATE whatsapp_chats 
+                                    SET chat_name = $1, updated_at = CURRENT_TIMESTAMP
+                                    WHERE device_id = $2 AND chat_jid = $3
+                                    AND chat_name = SUBSTRING(chat_jid FROM 1 FOR POSITION('@' IN chat_jid) - 1)
+                                `, [
+                                    contact.name || contact.notify || contact.id.split('@')[0],
+                                    deviceId,
+                                    contact.id
+                                ]);
+                            }
+                        }
+                    });
+                    
                     // Load initial chats after connection
                     setTimeout(async () => {
                         try {
@@ -241,14 +263,22 @@ class WhatsAppManager {
                             const db = getDB();
                             
                             // First, ensure chat exists in whatsapp_chats table
+                            const contactName = msg.pushName || msg.key.participant?.split('@')[0] || chatId.split('@')[0];
+                            
                             await db.none(`
                                 INSERT INTO whatsapp_chats (device_id, chat_jid, chat_name, is_group, last_message_text, last_message_time, unread_count)
                                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                                 ON CONFLICT (device_id, chat_jid) 
                                 DO UPDATE SET 
+                                    chat_name = CASE 
+                                        WHEN whatsapp_chats.chat_name = SUBSTRING(whatsapp_chats.chat_jid FROM 1 FOR POSITION('@' IN whatsapp_chats.chat_jid) - 1)
+                                        THEN EXCLUDED.chat_name
+                                        ELSE whatsapp_chats.chat_name
+                                    END,
                                     last_message_text = EXCLUDED.last_message_text,
                                     last_message_time = EXCLUDED.last_message_time,
                                     unread_count = CASE 
+                                        WHEN $8 = true THEN 0
                                         WHEN whatsapp_chats.last_message_time < EXCLUDED.last_message_time 
                                         THEN whatsapp_chats.unread_count + 1 
                                         ELSE whatsapp_chats.unread_count 
@@ -257,11 +287,12 @@ class WhatsAppManager {
                             `, [
                                 deviceId,
                                 chatId,
-                                msg.pushName || chatId.split('@')[0],
+                                contactName,
                                 false,
                                 msg.message?.conversation || msg.message?.extendedTextMessage?.text || 'Media',
                                 new Date(msg.messageTimestamp * 1000),
-                                msg.key.fromMe ? 0 : 1
+                                msg.key.fromMe ? 0 : 1,
+                                msg.key.fromMe
                             ]);
                             
                             // Store the message
